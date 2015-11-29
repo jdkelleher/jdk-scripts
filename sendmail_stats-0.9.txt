@@ -1,0 +1,310 @@
+#!/usr/bin/perl
+
+# works with perl 4
+
+# sendmail_stats Version 0.09
+# (c) 2000-2002 Jeremy C. Reed
+# this is free, but use at your own risk
+
+## still needs a lot of work; it is probably only 10 percent finished
+## and about 90 percent of this code needs to be rewritten.
+
+# use like in your crontab:
+#30 5 * * *      nobody /usr/contrib/bin/gunzip -c /var/log/maillog.0.gz |\
+# /usr/local/bin/sendmail_stats | /usr/bin/mail -s "sendmail stats" postmaster
+
+#for appending "@" and host name
+$default_hostname = 'EDIT-THIS-default-domain.net';
+
+$top_amt = 20;
+
+$debug = 0; # 2 is more verbose
+
+# show the total bytes received for each individual email address in the log
+$report_individual_bytes = 1; # 0 is off
+
+# make email addresses all lower case (so it will be case-insensitive)
+$lowercase = 1; # 0 if off
+
+## MAIN routine
+
+while ($line = <>) {
+
+  if ($line =~ 
+   /^(\w+)\s+(\d+)\s(\d+):(\d+:\d+)\s+([\w-]+)\s+([\w-]+)\[(\d+)\]:\s(\w+\d+):\s(.+)$/) {
+
+    if ($debug) { print "log line in expected format\n"; }
+    if ($debug > 1) { print "$line\n"; }
+
+    $month = $1;
+    $day = $2;
+    $hour = $3;
+    $min_sec = $4;
+    $host = $5;
+    $daemon = $6;
+    $pid = $7;
+    $id = $8;
+    $data = $9;
+
+    # get log start time
+    if (! $log_start_time) { $log_start_time = "$month $day $hour $min_sec"; }
+
+    if ($daemon eq 'sendmail' || $daemon eq 'sm-mta') {
+
+      if ($data =~ /from=(.+),\ssize=/) {
+        $from = $1;
+        $from =~ s/[><]//g;
+        if ($from eq "") {  # from a Mailer-Daemon
+          $from = "<>";
+        }
+
+        if ($lowercase) { $from = lc ($from); }
+        $senders{$from}++;
+        if ($debug) { print "sender is $from\n"; }
+
+        if ($data =~ / size=(\d+)\,\s/) {
+          $size = $1;
+          $sizes{$id} += $size; 
+          $total_size += $size;
+        }
+#$from_count++;
+
+        if ($data =~ / relay=(.+)[$:]/) {
+          $relay = $1;
+          if ($relay =~ /may be/) { $relay =~ s/(.*) \(may be/$1/; }
+          $sending_hosts{$relay}++;
+          if ($debug) { print "sending host is $relay\n"; }
+        }
+
+      } # from=
+      elsif (($data =~ /to=(.+)\, ctladdr=(.+), delay=/) ||
+             ($data =~ /to=(.+)\, delay=/)) {
+        $to = $1;
+        if ($2) {
+          $to = $2;
+          $to =~ s/ \(\d+\/\d+\)//g;
+        }
+
+        if ($data =~ / stat=([^ ]+)/) {
+          $stat = $1;
+        }
+
+        if ($stat eq "Sent") {
+          if ($data =~ / mailer=([^,]+)\,\s/) {
+            $mailer = $1;
+
+            if ($mailer eq "relay") {
+              $local_size += $sizes{$id};
+              delete ($sizes{$id});
+              $received_messages++;
+            }
+            if ($mailer eq "local" || $mailer eq "prog" ||
+                $mailer eq "virtual" || $mailer eq "*file*") {
+
+              $received_messages++;
+              $to =~ s/[<"](.+)[>"]/$1/; 
+              if ($lowercase) { $to = lc ($to); }
+              if ($to =~ /\,/) {
+                foreach $username (split (/\,/, $to)) {
+                  if ($username !~ /@/) {
+                    $username = $username . '@' . $default_hostname;
+                  }
+                  $local_deliveries{$username}++;
+                  if ($debug) { print "local delivery to $username\n"; }
+                  if ($report_individual_bytes) {
+                    $individual_size{$username} += $sizes{$id};
+                    if ($debug) { print "$username received $sizes{$id} bytes \n"; }
+                  }
+                }
+              }
+              else {
+                $local_deliveries{$to}++;
+                if ($debug) { print "local delivery to $to\n"; }
+                if ($report_individual_bytes) {
+                  $individual_size{$to} += $sizes{$id};
+                  if ($debug) { print "$to received $sizes{$id} bytes \n"; }
+                }
+              }
+
+              $local_size += $sizes{$id};
+              delete ($sizes{$id});
+
+            } # a local delivery
+            elsif ($mailer =~ /smtp|^relay$/i) {
+              $sent_messages++;
+
+              if ($data =~ / relay=([^,]+),\s.+$/) {
+                $relay = $1;
+                $destination_hosts{$relay}++;
+                if ($debug) { print "destination host is $relay\n"; }
+              }
+
+            } # sent out
+ 
+          } # mailer=
+
+          $hours{$hour}++;
+
+        } # stat is Sent
+        else {
+          $sending_problems++;
+          if ($debug) {
+            print "sending problem \"stat=$stat\" ($sending_problems)\n";
+          }
+        }
+      } # to=
+
+#      $months{$month}++;
+#      $days{$day}++;
+#      $total++;
+    }
+  }
+  else {
+    if ($debug) { print "log line not in expected format:\n$line\n"; }
+  }
+}
+
+# get log start time
+$log_end_time = "$month $day $hour $min_sec";
+
+## 1048576 is one meg
+$total_size_mb = sprintf ("%.1f", ($total_size/1048576));
+$local_size_mb = sprintf ("%.1f", ($local_size/1048576));
+
+print <<END_OF_DATA;
+Sendmail log analysis
+
+Log starts at $log_start_time and ends at $log_end_time
+
+Total bytes transferred: $total_size ($total_size_mb MB)
+Total bytes In: $local_size ($local_size_mb MB)
+Messages Out: $sent_messages
+Messages In: $received_messages
+Sending Problems: $sending_problems
+
+END_OF_DATA
+
+#print "from_count $from_count\n";
+
+$max = 0;
+for ($c = 0; $c < 24; $c++) {
+  if ($c < 10) { $i = "0$c"; }
+  else { $i = $c; }
+  if ($hours{$i} > $max) { $max = $hours{$i}; }
+}
+
+$scale = int($max/50);
+$scale = 1 if $scale == 0;
+
+print "Messages per hour (each dot is $scale messages)\n________________\n";
+
+for ($c = 0; $c < 24; $c++) {
+  if ($c < 10) { $i = "0$c"; }
+  else { $i = $c; }
+  printf("%3d: %6d %s\n", $i, $hours{$i}, "." x int($hours{$i}/$scale));
+}
+
+&show_sending_hosts;
+&show_destination_hosts;
+&show_local_deliveries;
+&show_senders;
+
+print "\n";
+
+## end
+
+sub show_sending_hosts {
+  $count = 0;
+  print "\nTop $top_amt Sending Hosts\n____________________\n";
+
+  foreach $key (sort {
+                  $sending_hosts{$b} <=> $sending_hosts{$a} }
+                keys %sending_hosts) {
+    $count++;
+    if ($count <= $top_amt) {
+      print "$sending_hosts{$key}\t$key\n";
+    }
+    $total_sending_hosts++;
+    $total_sending_host_messages += $sending_hosts{$key};
+  }
+
+  print "\n$total_sending_hosts sending hosts attempted $total_sending_host_messages messages\n"; 
+} # show_sending_hosts
+
+sub show_destination_hosts {
+  $count = 0;
+  print "\nTop $top_amt Destination Hosts\n________________________\n";
+
+  foreach $key (sort {
+                  $destination_hosts{$b} <=> $destination_hosts{$a} }
+                keys %destination_hosts) {
+    $count++;
+    if ($count <= $top_amt) {
+      print "$destination_hosts{$key}\t$key\n";
+    }
+    $total_destination_hosts++;
+    $total_destination_host_messages += $destination_hosts{$key};
+  }
+
+  print "\n$total_destination_hosts destination hosts received $total_destination_host_messages messages\n"; 
+
+} # show_destination_hosts
+
+sub show_local_deliveries {
+  $count = 0;
+  print "\nTop $top_amt Local Deliveries\n";
+  if ($report_individual_bytes) {
+    print "Bytes\tEmails\tAccount\n";
+  }
+  print "_______________________\n";
+
+  foreach $key (sort {
+                  $local_deliveries{$b} <=> $local_deliveries{$a} }
+                keys %local_deliveries) {
+    $count++;
+    if ($count <= $top_amt) {
+      if ($report_individual_bytes) {
+        print "$individual_size{$key}\t";
+      }
+      print "$local_deliveries{$key}\t$key\n";
+    }
+    $local_accounts++;
+    $total_local_messages += $local_deliveries{$key};
+  }
+  print
+ "\n$local_accounts local accounts received mail ($total_local_messages messages combined).\n";
+
+} # show_local_deliveries
+
+sub show_senders {
+  $count = 0;
+  print "\nTop $top_amt Senders\n______________\n";
+
+  foreach $key (sort {
+                  $senders{$b} <=> $senders{$a} }
+                keys %senders) {
+    $count++;
+    if ($count <= $top_amt) {
+      print "$senders{$key}\t$key\n";
+    }
+    $total_senders++;
+    $total_senders_messages += $senders{$key}; 
+  }
+  print
+ "\n$total_senders senders sent a combined $total_senders_messages messages.\n";
+
+} # show_senders
+
+sub show_data {
+
+  print <<END_OF_DATA;
+$month $day $hour $min_sec 
+$host $daemon
+$pid pid
+$id
+$data
+
+END_OF_DATA
+
+} #show data
+

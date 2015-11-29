@@ -1,0 +1,9 @@
+#!/bin/sh
+
+PCGEN_DIR='/home/kelleher/Work/dnd/PCGen'
+
+cd $PCGEN_DIR
+
+./pcgen.sh > /dev/null 2> /dev/null
+
+

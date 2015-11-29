@@ -1,0 +1,389 @@
+#!/usr/local/bin/perl
+# SMTP email verifier
+# A.Daviel, Vancouver Webpages
+sub disc {
+  print <<EOM ;
+$0 SMTP email relay check
+
+ DISCLAIMER: This script is intended to test mail relaying capabilities.
+ Unauthorized use of this script on non-local hosts may be interpreted as 
+ a network attack.
+ Each copy of this script is identified by a unique serial number and  
+ may be traced back to the user.   
+
+ THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND
+ ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ SUCH DAMAGE. UNAUTHORIZED MODIFICATION OF THIS SOFTWARE IS FORBIDDEN
+ UNDER COPYRIGHT LAW.
+
+EOM
+}
+
+
+$here = `hostname` ; chop($here) ;
+($hname,$aliases,$addrtype,$length,@addrs) =gethostbyname($here) ;
+$me = `whoami` ; chop($me) ;
+
+$good_address = $me.'@'.$here ;
+$bad_address = 'spammer@100.spammers.com' ;
+$bad_org = '100.spammers.com' ;
+$bad_user = 'baduser' ;
+
+require 5.003;
+
+use Socket;
+
+$tout1 = 10 ;  # timeout on initial connection
+$tout = 60 ;   # timeout on complete transaction
+
+# typical errors from sendmail:
+#220  connect
+#250 command OK
+#221 disconnect
+#214 help
+#252 not implemented
+#500 command bad
+#503 need mail
+
+# internal errors:
+#901 getprotobyname
+#902 inet_aton
+#903 socket fail
+#904 connect fail
+#905 timed out
+#906 node not found
+#907 loop test
+
+if ($ARGV[0] =~ /^-/) { $opt = shift(@ARGV) ;}
+$_= unpack("%16C*", $(.$<.$]) ; $|=1 ; # flush buffers
+
+$debug = ($opt eq '-t') ;
+
+print STDERR "$0 S/N $_ Email Relay Checker Copyright 1997 A.Daviel; please read disclaimer ($0 -D)\n\n";
+if ($opt =~ /-h/) { &help ; exit ; }
+if ($opt =~ /-D/) { &disc ; exit ; }
+$prstat = ($opt eq '-s') ;
+$quiet = ($opt eq '-q' || $prstat) ;
+
+
+$node = $ARGV[0] ;
+$one = $ARGV[0] ;
+$bad_address = $_.$bad_address ;
+
+if ($node) {
+  &checknode ($node) ;
+  exit ;
+}
+while (<STDIN>) {
+  chop ;
+  s/^\s+// ; 
+  if (/^#/) { next ; }
+  s/\s.*// ;
+  &checknode ($_) ;
+}
+if (!$nname) { &help ; }
+sub checknode {
+local($node) = $_[0] ;
+undef(@status) ; $timed_out=0 ; $sec=0 ;
+($nname,$aliases,$addrtype,$length,@addrs) =gethostbyname($node) ;
+if ($timed_out) { return ; }
+#@f = unpack('C4',$addrs[0]);
+unless ($nname) {
+  push(@status,"906") ;
+  &clean ; return ;
+}
+if (!$quiet) { print "Spam Test for $nname\n"; }
+if (!$debug) { $SIG{'ALRM'} = "timed_out" ; alarm($tout1) ; }
+$start = time ;
+
+$proto = getprotobyname('tcp') ; 
+if ($timed_out) { return ; }
+unless ($proto) {
+  print STDERR "ERROR: getprotobyname fail ($!)\n"; 
+   push(@status,"901") ;
+   &clean ; return ; 
+}
+
+$port = 25;
+$iaddr = inet_aton ($node) ; 
+if ($timed_out) { return ; }
+unless ($iaddr) {
+  print STDERR "ERROR: inet_aton ($!)\n";
+   push(@status,"902") ;
+   &clean ; return ; 
+}
+ 
+$sin = sockaddr_in ($port, $iaddr);
+$stat = socket(S, PF_INET, SOCK_STREAM, $proto) ; 
+if ($timed_out) { return ; }
+unless ($stat) {
+  print STDERR "ERROR: socket fail ($!): $proto\n" ; 
+   push(@status,"903") ;
+   &clean ; return ; 
+}
+
+$stat = connect(S, $sin) ; 
+if ($timed_out) { return ; }
+unless ($stat) {
+  #print STDERR "ERROR: connect fail ($!)\n"; 
+   push(@status,"904") ;
+   &clean ; return ;
+} 
+if (!$debug) { alarm($tout) ; }
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+$version = $_ ;
+if (!$quiet) { print "$_\n"; }
+&pstat ;
+if (!$quiet) { print "Check HELO\n";}
+send S, "MAIL From:<".$good_address.">\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_\n"; }
+&pstat ;
+
+&rset ;
+if (!$quiet) { print "HELO $bad_org .. " ;}
+send S, "HELO ".$bad_org."\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_"; }
+&pstat ;
+
+&rset ;
+if (!$quiet) { print "HELO $here .. " ;}
+send S, "HELO ".$here."\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_"; }
+&pstat ;
+
+if (!$quiet) { print "\nCheck VRFY and EXPN\n"; }
+
+if (!$quiet) { print "VRFY <postmaster> .. " ;}
+send S, "VRFY <postmaster>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_"; }
+&pstat ;
+
+if (!$quiet) { print "EXPN  <postmaster> .. " ;}
+send S, "EXPN  <postmaster>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_"; }
+&pstat ;
+
+# try bogus FROM
+if (!$quiet) { print "\nTest  FROM spoofing\n";}
+if (!$quiet) { print "From:<$bad_address> .. ";}
+send S, "MAIL From:<".$bad_address.">\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+&rset ;
+
+if (!$quiet) { print "From:<nosuchperson> .. " ; }
+send S, "MAIL From:<nosuchperson>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+&rset ;
+
+if (!$quiet) { print "From:<$good_address> .. " ;}
+send S, "MAIL From:<".$good_address.">\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_\n";}
+&pstat ;
+
+if (!$quiet) { print "Test mail relay\n";}
+if ($hname eq $nname && !$quiet) { print "$hname is local\n"; }
+
+if (!$quiet) { print "To:<$bad_address> .. ";}
+send S, "RCPT To:<".$bad_address.">\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+if (!$quiet) { print "To:<$good_address> .. ";}
+send S, "RCPT To:<".$good_address.">\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+if (!$quiet) { print "To:<$good_address\@$node> .." ; }
+send S, "RCPT To:<".$good_address."\@$node>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+if (!$quiet) { print "To <$me%$here\@$node> .." ;}
+send S, "RCPT To:<".$me."%".$here."\@$node>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+if (!$quiet) { print "To <$here!$me\@$node> .." ;}
+send S, "RCPT To:<".$here."!".$me."\@$node>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+if ($hname eq $nname) { $status[9] = '907'; }
+
+if (!$quiet) { print "\nInvalid user\n";}
+if (!$quiet) { print "To <no.such.user\@$node> .." ;}
+send S, "RCPT To:<no.such.user\@$node>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+if (!$quiet) { print "\nValid user\n";}
+if (!$quiet) { print "To <postmaster\@$node> .." ;}
+send S, "RCPT To:<postmaster\@$node>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+if (!$quiet) { print "To <webmaster\@$node> .." ;}
+send S, "RCPT To:<webmaster\@$node>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+if (!$quiet) { print "To <abuse\@$node> .." ;}
+send S, "RCPT To:<abuse\@$node>\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_";}
+&pstat ;
+
+
+if (!$quiet) { print "\nQuit.\n";}
+send S, "QUIT\r\n",0 ;
+recv S,$_,999,0 ; 
+if ($timed_out) { return ; }
+if (!$quiet) { print "$_\n";}
+
+
+&clean ; 
+} # end checknode
+
+sub timed_out {
+  #print STDERR "Port 25 timed out to $node\n";
+  push(@status,"905") ;
+  $timed_out=1 ; &clean ;
+}
+
+sub clean {
+  $sec = time - $start ;
+  if ($prstat) {
+    print  "$node ";
+    foreach $_ (@status) {
+      print "$_ ";
+    }
+    print "\n";
+  }
+  if (!$prstat) {
+    if ($status[0] eq '904') { print "$nname rejects SMTP mail\n"; 
+    } elsif ($status[0] eq '905') { print "$nname could not be reached\n";
+    } elsif ($status[0] eq '906') { print "$node not found\n";
+    } elsif ($status[0] =~ /^9/) { print "Internal error\n" ;
+    } else {
+      if ($version) { print "$nname $version" ; }
+      print "$nname requires HELO: " ; &npyn(1) ;
+      print "$nname allows VRFY username verification: "; &pyn(4) ;
+      print "$nname allows EXPN forwarding expansion: ";  &pyn(5) ;
+      print "$nname allows bogus From: header: "; &pyn(6) ;
+      if ($status[9] eq '907') {
+        print "$nname is local\n";
+      } else {
+        print "$nname allows mail relaying: ";
+        if (($status[9] =~ /^2/) ||
+          ($status[10] =~ /^2/) ||
+          ($status[11] =~ /^2/) ||
+          ($status[12] =~ /^2/) ||
+          ($status[13] =~ /^2/)) {
+        print "YES\n"; 
+        } else { print "NO\n"; }
+      }
+      print "$nname can mail to postmaster: ";  &pyn(15) ;
+      print "$nname can mail to webmaster: ";  &pyn(16) ;
+      print "$nname can mail to abuse: ";  &pyn(17) ;
+      foreach $_ (@status) { 
+        if ($_ eq '905') { print "$nname timed out\n"; }
+      }
+    }
+    if ($sec>0) { print "$nname - $sec seconds\n"; }
+  } 
+   alarm(0);
+}
+
+sub rset {
+  if (!$quiet) { print "Reset.. ";}
+  send S, "RSET\r\n",0 ;
+  recv S,$_,999,0 ;
+  if (!$quiet) {  print "$_" ;}
+}
+sub pstat {
+  tr/\n/ /; chop ; s/\D.*// ; push(@status,$_) ;
+}
+sub npyn {
+  if ($status[$_[0]] =~ /^250/) { print "NO\n"; } else { print "YES\n"; }
+}
+sub pyn {
+  if (!($status[$_[0]] =~ /^250/)) { print "NO\n"; } else { print "YES\n"; }
+}
+sub help {
+  print <<EOM ;
+SMTP Email Relay Checker
+Usage: $0 [-q|-s|-D|-t] <ip address> 
+This program attempts to relay email messages through sendmail.
+No actual messages are sent; only recipients are tested.
+Please read the disclaimer ($0 -D)
+
+If -s is specified, the test runs quietly and only generates a status line.
+If -q is specified, the test runs quietly and only generates a summary.
+If -t is specified, timeouts are disabled.
+If  <ip address> is not present, will read a list of addresses from STDIN
+such as that produced by "host -l <domain>".
+
+The summary is designed to be fed to "grep", "sort", etc.
+The status line is designed to be fed to e.g. another Perl script for statistics gathering.
+
+The status elements (with -s) are from the following commands, sequentially:
+
+connect, mail no helo, helo badorg, helo goodaddr, vrfy postmaster,
+expn postmaster, from badaddr, from nosuchperson, from goodaddr,
+to badaddr, to goodaddr, to good\@org\@node, to good%org\@node,
+to org!good\@node, to nosuchuser, to postmaster, to webmaster,
+to abuse
+
+status values are from sendmail, except 900 series which indicate a local error.
+904 is connect fail (SMTP mail not supported)
+905 is timed out (tcp connect failed)
+906 is not found (DNS lookup failure)
+907 means you are testing this machine, so relay tests are pointless
+EOM
+}
+

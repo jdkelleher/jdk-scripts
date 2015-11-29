@@ -1,0 +1,136 @@
+#!/usr/bin/perl -s
+
+$dir = shift || ".";
+
+opendir( dH, $dir ) || die "can't read directory $dir\n"; 
+while ( defined( $file = readdir( dH ) ) ) {  
+    next if ( $file eq "." || $file eq ".." );  
+    $file = "$dir/$file";
+    ( $dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size,
+	$atime, $mtime, $ctime, $blksize, $blocks ) = stat( $file );
+    next if ( ! -f _ );
+    $sizes{ $file } = $size;
+    $mtimes{ $file } = $mtime;
+    }
+closedir dH;
+
+$rmcount = 0;
+$rmsize = 0;
+
+# first pass sorted by file size 
+$verbose && print "starting first pass, sorted by size\n";
+$prev = '';
+foreach $file ( sort { $sizes{ $a } <=> $sizes{ $b } } keys %sizes ) { 
+    $verbose && print "considering $file\n";
+    if ( $prev && $file ne $prev 
+	    && $sizes{ $file } == $sizes{ $prev }
+	    && &sum( $file ) eq &sum( $prev ) ) { 
+	$rmcount++;
+	$rmsize += $sizes{ $file };
+	$prev = &rm_younger( $file, $prev );
+	}
+    else { 
+	$prev = $file;
+	}
+    }
+$verbose && print "first pass removed $rmcount files = $rmsize bytes\n";
+
+
+# second pass sorted by sum 
+# intended to pick up cases where a different file of same size happened to 
+# size-sort between two identical files
+# Since the sizes are the same the files are guaranteed to have been summed 
+# in previous pass.  So just worry about ones in %sums.  That way we 
+# ignore all the files with unique sizes, hopefully many.
+$verbose && print "starting second pass, sorted by sum\n";
+$prev = '';
+foreach $file ( sort { $sums{ $a } cmp $sums{ $b } } keys %sums ) { 
+    $verbose && print "considering $file\n";
+    if ( $prev && $file ne $prev 
+	    && $sizes{ $file } == $sizes{ $prev }
+	    && &sum( $file ) eq &sum( $prev ) ) { 
+	$rmcount++;
+	$rmsize += $sizes{ $file };
+	$prev = &rm_younger( $file, $prev );
+	}
+    else { 
+	$prev = $file;
+	}
+    }
+print "removed $rmcount files = $rmsize bytes\n";
+
+exit 0;
+
+#############################
+
+
+sub sum { 
+    my( $filename ) = @_;
+    my( $str, $sum );
+
+    $vverbose && print "in sum( @_ )\n";
+    if ( defined( $sums{ $filename } ) ) { 
+	return $sums{ $filename };
+	}
+    $vverbose && print "summing $filename\n";
+
+    ## unsafe
+    #$str = `/usr/bin/md5sum \'$filename\'`;
+    #( $sum ) = split( /\s+/, $str );
+    #$sums{ $filename } = $sum;
+    #
+    ## safe
+    $prog = '/usr/bin/md5sum';
+    $pid = open( SUM, "-|");
+    if ($pid) {   # parent
+    while ( <SUM> ) {
+	( $sum ) = split( /\s+/, $str );
+    }
+    close( SUM ) || warn "$prog exited $?";
+    $sums{ $filename } = $sum;
+    } else {      # child
+	exec ($prog, $filename )
+	    || die "can't exec $prog $!";
+	# NOTREACHED
+    }
+
+    return $sum;
+    }
+
+
+# take two filenames, remove younger, return older's name
+# if same age, remove lexographicly lessor
+sub rm_younger { 
+    my( $file1, $file2 ) = @_;
+    my( $to_rm, $to_keep );
+
+    if ( $mtimes{ $file1 } < $mtimes{ $file2 } ) {
+	$to_keep = $file1;
+	$to_rm = $file2;
+	}
+    elsif ( $mtimes{ $file1 } > $mtimes{ $file2 } ) { 
+	$to_keep = $file2;
+	$to_rm = $file1;
+	}
+    elsif ( $file1 lt $file2 ) { 
+	$to_keep = $file1;
+	$to_rm = $file2;
+	}
+    elsif ( $file1 gt $file2 ) { 
+	$to_keep = $file2;
+	$to_rm = $file1;
+	}
+    else { 
+	# Someone screwed up and gave us the same filename twice
+	warn "rm_younger asked to compare a file with itself '$file1'";
+	return $file1;
+	}
+    print "removing $to_rm\n";
+    unlink $to_rm if ( ! $safe );
+    delete $sizes{ $to_rm };
+    delete $mtimes{ $to_rm };
+    delete $sums{ $to_rm };
+    return $to_keep;
+    }
+
+

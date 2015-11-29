@@ -1,0 +1,210 @@
+#!/usr/bin/env python
+
+"""addtomaildir
+
+Reads an RFC 822 message (possibly with leading "From " line) on stdin
+and adds it to a Maildir.  The exact details of where it lands and what
+it's called in the Maildir depend on various header values in the input
+message:
+
+  * if no "Status" header, the message goes in "new", otherwise in "cur"
+
+  * if "Status" is "O" (old), the filename has no info field
+
+  * if "Status" is "RO" (read old), the filename has ":2,S" appended
+    as its info field
+
+  * the mtime of the file will be the delivery time of the message,
+    if we can figure out the delivery time.  Tries the "Delivery-date"
+    header first, then the "From " line; if neither exists or can
+    be parsed, leaves the mtime alone.
+"""
+
+import sys, os, re
+import socket, errno
+from time import time, mktime, strptime, ctime, sleep
+from rfc822 import Message, parsedate_tz, mktime_tz
+
+
+
+class Error (Exception):
+    pass
+
+
+def warn (msg):
+    sys.stderr.write("warning: %s\n" % msg)
+
+
+def maildir_open (maildir):
+    # Assumes we're already chdir'd into maildir
+
+    hostname = socket.gethostname()
+    pid = os.getpid()
+    num_tries = 0
+    max_tries = 5
+    while 1:
+        name = "tmp/%.6f%05d.%s" % (time(), pid, hostname)
+        ok = 0                          # assume the worst
+        num_tries += 1
+        try:
+            os.stat(name)
+        except OSError, err:
+            # Good: file called 'name' doesn't already exist.
+            if err.errno == errno.ENOENT:
+                ok = 1
+
+        if ok:
+            break
+        else:
+            if num_tries > max_tries:
+                raise Error("error: could not create temporary file in %s/tmp"
+                            % maildir)
+            sleep(2)               # and try again
+
+    fd = os.open(name, os.O_WRONLY|os.O_EXCL|os.O_CREAT, 0600)
+    return (name, fd)
+
+
+def grok_status (msg):
+    # Figure out if this is a new message, an "old" message
+    # (seen by MUA, but not read by user), or a read message.
+    status = msg.get("Status")
+    if status == "O":                   # seen by MUA, but not read by user
+        dir = "cur"
+        info = ""
+    elif status == "RO":                # read by user
+        dir = "cur"
+        info = ":2,S"
+    else:                               # not there, empty, or unknown value
+        dir = "new"
+        info = ""
+
+    return (dir, info)
+
+def get_delivery_time (msg):
+    # Figure out the delivery time.
+    dtime = None
+    if msg.has_key("Delivery-date"):
+        # eg. "Thu, 12 Jul 2001 08:47:20 -0400" to 994942040 (seconds
+        # since epoch in UTC)
+        dtime = mktime_tz(parsedate_tz(msg["Delivery-date"]))
+    elif msg.unixfrom:
+        # Parse eg.
+        #   "From python-dev-admin@python.org Thu Jul 12 08:47:20 2001"
+        # -- this is the "From " line format used by Exim; hopefully other
+        # MTAs do the same!
+        m = re.match(r'^From (\S+) +(\w{3} \w{3}\s+\d\d? \d\d:\d\d:\d\d \d{4})$',
+                     msg.unixfrom)
+        if not m:
+            warn("warning: could not parse \"From \" line: %s" % msg.unixfrom)
+        else:
+            (return_path, dtime_str) = m.groups()
+            # Eg. "Thu Jul 12 08:47:20 2001" -> 994945640 -- note that
+            # this might be different from what we get parsing the same
+            # date string above, because this one doesn't include the
+            # timezone.  Sigh.
+            dtime = mktime(strptime(dtime_str, "%c"))
+
+            # Attempt to detect and correct for DST differences.
+            # (This works if we parsed a summer time during the winter;
+            # what about the inverse?)
+            dtime_str_curtz = ctime(dtime)
+            if dtime_str_curtz != dtime_str:
+                dtime_curtz = mktime(strptime(dtime_str_curtz, "%c"))
+                diff = dtime_curtz - dtime
+                dtime -= diff
+
+    return dtime
+
+def write_message (msg, msg_file, out_fd):
+    # Write the headers to the temp file.
+    headers = str(msg) + "\n"
+    n = os.write(out_fd, headers)
+    if n != len(headers):
+        raise Error("failed to write headers (%d/%d bytes written)"
+                    % (n, len(headers)))
+    
+    # Copy the body from msg_file to the temp file.
+    chunk = 16*1024
+    while 1:
+        data = msg_file.read(chunk)
+        if not data:
+            break
+        n = os.write(out_fd, data)
+        if n != len(data):
+            raise Error("failed to write chunk of body (%d/%d bytes written)"
+                        % (n, len(data)))
+
+    # Sync and close the temp file.
+    try:
+        os.fsync(out_fd)
+        os.close(out_fd)
+    except OSError, err:
+        os.unlink(tmp_name)
+        raise Error("unable to fsync() or close() temp file: %s" % err)
+
+
+def finish_message (tmp_name, dir, info, dtime):
+
+    # Link the temp file to its ultimate destination (in either "new" or
+    # "cur", with info appended to the name), and remove the temp name.
+    base_name = os.path.basename(tmp_name)
+    dst_name = os.path.join(dir, base_name + info)
+    os.link(tmp_name, dst_name)
+
+    # Set the modification time to the delivery time, if known.
+    if dtime is not None:
+        atime = os.stat(dst_name).st_atime
+        os.utime(dst_name, (atime, dtime))
+
+    return dst_name
+
+def add (msg_file, maildir):
+    # First reserve a place in the maildir (ie. open the file in tmp).
+    start_dir = os.getcwd()
+    os.chdir(maildir)
+    (tmp_name, out_fd) = maildir_open(maildir)
+
+    try:
+        msg = Message(msg_file)
+        (dir, info) = grok_status(msg)
+        dtime = get_delivery_time(msg)
+        write_message(msg, msg_file, out_fd)
+        dst_name = finish_message(tmp_name, dir, info, dtime)
+    finally:
+        os.unlink(tmp_name)
+        os.chdir(start_dir)
+
+    print dst_name
+
+# add ()
+
+
+def main ():
+    prog = os.path.basename(sys.argv[0])
+    args = sys.argv[1:]
+    if len(args) == 1:
+        maildir = args[0]
+        msg_file = sys.stdin
+    elif len(args) == 2:
+        (msg_filename, maildir) = args
+        msg_file = open(msg_filename)
+    else:
+        sys.exit("usage: %s maildir\n"
+                 "       %s msg_file maildir\n"
+                 "\n"
+                 "error: incorrect number of arguments\n")
+
+    if not (os.path.isdir(maildir) and
+            os.path.isdir(os.path.join(maildir, "tmp")) and
+            os.path.isdir(os.path.join(maildir, "cur")) and
+            os.path.isdir(os.path.join(maildir, "new"))):
+        sys.exit("error: not a maildir: %s" % maildir)
+
+    try:
+        add(msg_file, maildir)
+    except Error, err:
+        sys.exit(str(err))
+
+
+main()

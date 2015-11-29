@@ -1,0 +1,30 @@
+#!/bin/csh -f
+# Original by Doke Scott, this was mutilated by J. Kelleher
+
+#   WHOAMI   = whoami   = effective user from `whoami`
+
+set ME=`whoami`
+if ("$ME" == "$user") then
+    set prefix = ""
+else
+    set prefix = $ME@
+endif
+
+if ( $#argv == 0 ) then
+    echo -n "]0;$prefix"`hostname | sed -e 's/\..*//'`""
+else if ( "$1" == "-x" && $#argv < 3 ) then
+    if ( $#argv == 1 ) then
+	    echo -n "]0;xterm $prefix"`hostname | sed -e 's/\..*//'`""
+    else 
+	echo -n "]0;xterm "$2""
+    endif
+else if ( $#argv == 1 ) then
+    echo -n "]0;"$1""
+else
+    echo "Usage: winame [-x] ['string']"
+    echo "  sets xterm title to string"
+    echo "  -x turns on prepending 'xterm'"
+    echo "  if string omited then uses machine name"
+    exit 0
+endif
+

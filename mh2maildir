@@ -1,0 +1,671 @@
+#!/bin/sh
+# transform mails stored in MH format into MAILDIR format using procmail(1)
+#
+# Author: Dr. Jürgen Vollmer <Juergen.Vollmer@informatik-vollmer.de>
+# Copyright (C) 2002 Dr. Jürgen Vollmer, Karlsruhe, Germany
+# For usage and license agreement, see below (function usage)
+#
+# Id: mh2maildir,v 1.17 2005/04/08 21:00:32 vollmer Exp $
+# Version: 1.11 of 2005/04/08
+
+# set -x
+
+CMD=`basename $0`
+
+###############################################################################
+
+usage()
+{
+    cat <<END
+usage: $CMD [options] old new [folder]
+transform mails stored in MH format into MAILDIR format using procmail(1)
+
+Options:
+        -a       Abort, if procmail produces differences in the MH and MAILDIR
+                 mail. Default: ask the user.
+                 (Some minor diff's, like removing a second From: line)
+                  are already ignored by default).
+        -A       Your DIFF program does not know the -a (Treat all files as
+                 text) flag. Default: it knows.
+                 The -a flag is needed in order to avoid false positive binary.
+        -b char  Replace a blank in a MH folder name by \`char', default \`_'.
+		 To remove all dots use \`-b ""'
+        -h       Show help piped through more
+        -H       Show help.
+        -d char  Replace a dot in a MH folder name by \`char', default \`-'.
+		 To remove all dots use \`-d ""'
+        -D prog  Use \`prog' for presenting differences.
+                 Default: diff(1) if no DISPLAY variable is set, else
+                          a graphical diff-utility is searched.
+        -f       Force overwriting the \`new' directory.
+                 Default: it should not exist and is created by $CMD.
+        -kmail   Create subdirectory names as used by kmail.
+                 Default: use same names as used by MH.
+                 This implies -R.
+        -courier Create subdirectory names as used by courier-imap.
+                 Default: use same names as used by MH.
+                 This implies -R.
+        -q       Be quiet.
+        -r       Mark mails as read.
+                 Default: mails are marked as unread.
+        -R       Process recursively all subdirectories of \`old'.
+                 For each subdirectory of \`old' a subdirectory in \`new' with
+                 the same name is created.
+                 Default: only the MH files contained in \`old' are processed.
+        -U       Your DIFF program does not know the -u (Output NUM (default 3)
+                 lines of unified context) flag.
+                 DIFF is called with this flag only if differences between the
+                 original and the processed file are found and if you don't
+                 have the graphical diff-tools tkdiff, mgdiff or gvimdiff
+		 installed.
+        -v       Show version.
+
+Arguments:
+        old      The MH mail directory.
+        new      The MAILDIR mail directory.
+        folder   Store all mails below the \`folder' of \`new'.
+                 Default: store them direct below \`new'.
+
+The integrity of the transformed mails is checked (using diff)
+The timestamp of the new mail file is set to old one.
+The MH mail files are not modified.
+
+Important Notes:
+  It's also a good idea to shut down your incoming mail delivery while
+  you're doing this, or else your new messages will get into whatever
+  folder you happen to be converting at the moment.
+
+  You should not chose \`new' to be equal \`old'.
+
+  This is the initial release of $CMD, so if you encounter some
+  problems or if you have ideas for extensions, please drop me an email.
+
+Example:
+  Transform all mails below the directory Mail and its subdirectories
+  and store them below the folder KMail/old. Mark all mails as read.
+     $CMD -kmail -r -R Mail KMail old
+
+  And the same thing to a courier-imap server
+     $CMD -courier -r -R Mail EMAIL old
+
+From the KMAIL FAQ:
+  Can I configure the location of my mail directory?
+
+  Exit KMail, make a backup of ~/.kde/share/config/kmailrc, then open it
+  with an editor and add e.g. folders=/home/username/.mail to the "[General]"
+  section. Then move all your existing folders (including the hidden index
+  files) to the new location. The next time you start KMail it will use
+  /home/username/.mail instead of /home/username/Mail. Note that KMail
+  will lose its filters if you change the mail directory's location but
+  forget to move your existing folders.
+
+Credits:
+  Thanks to Craig Dickson <crdic-at-yahoo.com> who gave me the hint using
+  procmail to do the job.
+
+  Thanks to Chris Wesseling <chris-at-araneum.nl>, Bruce C. Dillahunty
+  <bdillahu-at-peachbush.com>, Marco Molteni <molter-at-tin.it>,
+  Matthias Hessler <mail-at-mhessler.de>, Chris Horn
+  <chorn-at-alumni.brown.edu>, David Carrel <carrel-at-SailPix.com>,
+  T.Yoshida <deuce-at-metal.or.jp>, and "Vincent Untz" <vincent-at-vuntz.net>
+  who all send me improvements and bug fixes (see also Log-entry at the end
+  of this file).
+
+Other information:
+  Informations about the MAILDIR format may be found on
+  the pages of D. J. Bernstein: http://cr.yp.to/proto/maildir.html
+
+Version:
+  1.11 of 2005/04/08
+
+Author:
+  Dr. Jürgen Vollmer <Juergen.Vollmer@informatik-vollmer.de>
+  If you find this software useful, I would be glad to receive a postcard
+  from you, showing the place where you're living.
+
+Homepage:
+  http://www.informatik-vollmer.de/software/mh2maildir.html
+
+Copyright:
+  (C) 2002 Dr. Jürgen Vollmer, Viktoriastrasse 15, D-76133 Karlsruhe, Germany
+
+License:
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+END
+}
+
+###############################################################################
+# configuration
+###############################################################################
+
+# does procmail(1) exist?
+PROCMAIL=`which procmail`
+if   [ -z "$PROCMAIL" ]
+then echo "$CMD: sorry no procmail(1) program found."
+     echo " - and without one $CMD does not work."
+     exit 1
+fi
+
+# It seems that FreeBSD's sed need the -E (extended reg. expr.) flag.
+# reported by: Marco Molteni <molter-at-tin.it>
+# Again another BSD fix given by  "T.Yoshida" <deuce-at-metal.or.jp>
+SED=sed
+if [ `uname` = "FreeBSD" ]
+then SED="$SED -E"
+else if   ( sed --version | grep GNU ) > /dev/null 2>&1
+     then SED="$SED -r"
+     fi
+fi
+
+# for internal use only
+DEBUG=NO
+#DEBUG=YES
+
+###############################################################################
+
+# temporary created promailrc file
+PROCMAIL_RC=${TMP=/tmp}/$CMD.$$.procmail.rc
+
+# temporary file holding the procmail log
+PROCMAIL_LOG=${TMP=/tmp}/$CMD.$$.procmail.log
+
+# temporary file holding the result of diff'ing the original and result file
+DIFF_RES=${TMP=/tmp}/$CMD.$$.diff-result.txt
+
+# a file used to count the number of files
+COUNT_FILE=${TMP=/tmp}/$CMD.$$.count
+
+# diff program to use when showing differences of the original and copy
+# see also $DIFF_U_OPT
+if [ -z "$DISPLAY" ]
+then DIFF=diff
+else DIFF=`which tkdiff`
+     if [ ! -z "$DIFF" ]
+     then # if we're using TKDIFF together with GNU diff, we may pass --text
+	  # for tkdiff, -a has a special meaning...
+	  ( diff --version | grep GNU ) > /dev/null 2>&1 && DIFF="$DIFF --text"
+     else [ -z "$DIFF" ] && DIFF=`which mgdiff`
+          [ -z "$DIFF" ] && DIFF=`which gvimdiff`
+          [ -z "$DIFF" ] && DIFF=`which vimdiff`
+          [ -z "$DIFF" ] && DIFF="diff"
+     fi
+fi
+
+# remove temporary created files on exit
+trap "rm -f $PROCMAIL_RC $PROCMAIL_LOG $DIFF_RES $COUNT_FILE" EXIT
+
+###############################################################################
+# some functions
+###############################################################################
+
+error()
+{
+    echo
+    echo "$CMD: error $1"
+    exit 1;
+}
+
+###############################################################################
+
+verbose()
+{
+    [ $VERBOSE = YES ] && echo $2 " ... $1"
+}
+
+###############################################################################
+
+COUNT=0
+# set the global variable COUNT to 0 and increment it
+init_count()
+{
+    rm -f $COUNT_FILE
+    echo 0 > $COUNT_FILE
+}
+
+###############################################################################
+
+inc_count()
+{
+    COUNT=`cat $COUNT_FILE`
+    COUNT=`expr $COUNT + 1`
+    echo $COUNT > $COUNT_FILE
+}
+
+###############################################################################
+
+get_count()
+{
+    COUNT=`cat $COUNT_FILE`
+}
+
+###############################################################################
+
+# show that we are processing by using a "rotating" | i.e. a sequence of |/-\
+STEP="|"
+step_start()
+{
+    [ $VERBOSE = YES ] && echo -n $STEP
+}
+step()
+{
+    [ $VERBOSE = YES ] && echo -e "\b\b${STEP} \c"
+    case $STEP in
+	"|"  ) STEP="/";;
+	"/"  ) STEP="-";;
+	"-"  ) STEP="\\";;
+	"\\" ) STEP="|";;
+    esac
+}
+step_end()
+{
+    [ $VERBOSE = YES ] && echo -e "\b\b $*"
+}
+
+###############################################################################
+
+create_procmail_rc()
+{
+    FOLDER=$1
+    rm -f $PROCMAIL_RC
+    cat > $PROCMAIL_RC <<END
+PATH=/bin:/usr/bin:/usr/bin
+MAILDIR=$NEW
+
+# no log file given, results in write log to stdout
+# LOGFILE=xxxxx
+
+# generate a 'procmail: Assigning "LASTFOLDER=<filename>"' line
+VERBOSE=on
+
+LOCKSLEEP=2
+
+# Deliver mail in MAILDIR format into folder $FOLDER:
+# from procmailrc(5)
+# rule flags:
+#  r    Raw mode, do not try to ensure the mail ends with  an
+#       empty line, write it out as is.
+# action line:
+#  If the mailbox name ends  in  "/",  then  this
+#  directory  is presumed to be a maildir folder; i.e., proc
+#  mail will deliver the message to a file in a  subdirectory
+#  named  "tmp"  and  rename  it  to be inside a subdirectory
+#  named "new".  If the mailbox is  specified  to  be  an  MH
+#  folder  or maildir folder, procmail will create the necessary
+#  directories if they don't exist,  rather  than  treat
+#  the  mailbox as a non-existent filename.
+
+:0r :
+$FOLDER/
+END
+}
+
+###############################################################################
+
+create_dir()
+{
+    DIR=$1
+    if   [ ! -d "$DIR" ]
+    then
+	 mkdir -p "$DIR" || error "can not create new directory $DIR"
+    fi
+}
+
+###############################################################################
+
+show_diffs()
+{
+   SRC=$1
+   DST=$2
+   echo
+   echo "$CMD: differences in $SRC and $DST"
+   if [ $DEBUG = YES ]
+   then
+      echo
+      echo "------ procmail log ----"
+      more $PROCMAIL_LOG
+      echo "------ diffs -----------"
+      more $DIFF_RES
+      echo "------------------------"
+   fi
+   $DIFF $DIFF_U_OPT "$SRC" "$DST"
+}
+
+###############################################################################
+
+process_dir()
+# transform all MH-mails (i.e. files which with names consisting only of
+# digits) of the directory $SRC to MAILDIR formatted mails in folder
+# derived from $SRC
+{
+    SRC=$1
+
+    # FOLDER = $SRC without the leading $OLD part and any dots replaced
+    #          by $DOT_REPLACEMENT
+    FOLDER=$NEW_FOLDER`echo $SRC | 			  \
+		       $SED -e "s|\.|$DOT_REPLACEMENT|g"  \
+			    -e "s| |$BLANK_REPLACEMENT|g" \
+			    -e "s|^$OLD/*||"`
+
+    [ -z "$FOLDER" ] && FOLDER=inbox
+    if [ $USE_KMAIL_FOLDER_NAMES = YES ]
+    then
+	# the filenames of KMAIL folders / sub folders are build as:
+	# a folder dir/sub/subsub
+	# is mapped to
+	#  dir/cur
+	#     /new
+	#     /tmp
+	#  .dir.directory/sub/cur
+	#                    /new
+	#                    /tmp
+	#  .dir.directory/.sub.directory/subsub/cur
+        #                                      /new
+	#                                      /tmp
+	folder=
+	for dir in `echo $FOLDER | $SED -e's|/| |g'`
+	do
+	  folder="$folder.$dir.directory/"
+	done
+	FOLDER=`dirname "$folder"`/`basename "$FOLDER"`
+    fi
+
+    if [ $USE_COURIER_FOLDER_NAMES = YES ]
+    then
+	# the filenames of COURIER folders / sub folders are build as:
+	# a folder dir/sub/subsub
+	# is mapped to
+	#  .dir/cur
+	#      /new
+	#      /tmp
+	#  .dir.sub/cur
+	#          /new
+	#          /tmp
+	#  .dir.sub.subsub/cur
+        #                 /new
+	#                 /tmp
+	folder=
+	FOLDER=.`echo $FOLDER | $SED -e's|/|.|g' | $SED -e's|\.$||'`
+    fi
+    create_dir "$NEW/$FOLDER"
+    create_procmail_rc "$FOLDER"
+    verbose "read from directory $SRC and store in $NEW/$FOLDER: " -n
+    step_start
+
+    init_count # count processed mails
+
+    # for each MH mail do:
+    find "$SRC" -type f -maxdepth 1 -name "[0-9]*" -print |
+    while read f
+    do
+      step
+      inc_count
+
+      # call procmail, VERBOSE=YES output a line
+      #  procmail: Assigning "LASTFOLDER=<filename>"
+      # which names the created destination name
+      # extract that name
+      $PROCMAIL $PROCMAIL_RC < "$f" > $PROCMAIL_LOG 2>&1
+      MAIL_FILE=`$SED -n < $PROCMAIL_LOG \
+                 -e's|^procmail: Assigning "LASTFOLDER=([^"]*)"$|\1|p'`
+
+      # give the old time stamp to the new file
+      touch -r "$f" "$NEW/$MAIL_FILE"
+
+      # check it
+      [ $DEBUG = YES ] && echo "$f $NEW/$MAIL_FILE"
+      diff $DIFF_A_OPT "$NEW/$MAIL_FILE" "$f" > $DIFF_RES 2>&1
+      LINES=`wc -l < $DIFF_RES | $SED -e's/ *//g'`
+      DIFF_PROBLEM=2; # 0=no diff, 1=insignificant diff, 2=significant diff
+      case $LINES in
+	  0) # ok, no diffs
+	     DIFF_PROBLEM=0
+	     ;;
+	  2) # sometimes procmail removes a "From" contained in the first line
+	     # that's ok
+	     [ `$SED -e'/^0a1$/d' -e'/^> From .*@.*/d' $DIFF_RES |
+		wc -l` -eq 0 ] && DIFF_PROBLEM=0
+
+	     [ `$SED -e'/^0a1$/d' -e'/^> From MAILER-DAEMON /d' $DIFF_RES |
+		wc -l` -eq 0 ] && DIFF_PROBLEM=0
+	     ;;
+	  4) # sometimes procmail normalizes the "Content-Length:" line
+	     # just ignore
+	     [ `$SED -e'/^[0-9]*c[0-9]*$/d' \
+                        -e'/^---$/d'           \
+		        -e'/^(<|>) [Cc]ontent-[Ll]ength:.*[0-9]*/d' $DIFF_RES|\
+		wc -l` -eq 0 ] && DIFF_PROBLEM=0
+	     ;;
+          *) # there are diffs!
+	     DIFF_PROBLEM=2
+      esac
+
+      # react on diff results
+      case $DIFF_PROBLEM in
+	  0) # ok, no diffs
+	     ;;
+	  1) # ok, insignificant diffs
+	     ;;
+	  2) # ask, significant diffs
+	     show_diffs "$f" "$NEW/$MAIL_FILE"
+	     if [ $ABORT_ON_DIFF = YES ]
+	     then error "there are differences in $NEW/$MAIL_FILE and $f"
+	     else while true
+		  do
+		    echo
+		    echo "there are differences in $NEW/$MAIL_FILE and $f"
+		    echo -n "ignore diff and continue (c|C) or abort $CMD (a|A): "
+		    read answer < /dev/tty
+		    case $answer in
+			c | C ) break;; # ok
+			a | A ) error "exit after diff";;
+			*     ) continue;;
+		    esac
+		  done
+             fi
+	     ;;
+      esac
+
+      if [ $MARK_AS_READ = YES ]
+      then base=`basename "$MAIL_FILE"`
+	   mv "$NEW/$MAIL_FILE" "$NEW/$FOLDER/cur/$base:2,S" || \
+	   error "mark as read: can not move $NEW/$MAIL_FILE"
+      fi
+
+    done
+
+    # if the MH directory didn't contain any mail files, procmail isn't called
+    # therefore create cur, new and tmp directories separate
+    get_count
+    if [ $COUNT -eq 0 ]
+    then
+	create_dir "$NEW/$FOLDER/cur"
+	create_dir "$NEW/$FOLDER/new"
+	create_dir "$NEW/$FOLDER/tmp"
+    fi
+
+    step_end "processed $COUNT mails"
+}
+
+###############################################################################
+# process and check options and arguments
+###############################################################################
+
+MARK_AS_READ=NO
+RECURSIVE=NO
+VERBOSE=YES
+FORCE_OVERWRITE=NO
+USE_KMAIL_FOLDER_NAMES=NO
+USE_COURIER_FOLDER_NAMES=NO
+ABORT_ON_DIFF=NO
+DOT_REPLACEMENT=-
+BLANK_REPLACEMENT=_
+
+DIFF_A_OPT="-a"
+if [ "$DIFF" = diff ]
+then DIFF_U_OPT=-u
+else # other diff program's don't use the -u flag
+     DIFF_U_OPT=
+fi
+
+while getopts aAb:hHd:fqrRUvk:c:D: opt "$@"
+do
+  case $opt in
+      a) ABORT_ON_DIFF=YES;;
+      A) DIFF_A_OPT=;;
+      b) BLANK_REPLACEMENT=$OPTARG;;
+      f) FORCE_OVERWRITE=YES;;
+      d) DOT_REPLACEMENT=$OPTARG;;
+      D) if which $OPTARG
+	 then DIFF=$OPTARG
+	 else echo "$CMD: no such diff command $OPTARG"
+	      exit 1;
+	 fi
+         ;;
+      k) if [ "$OPTARG" = mail ]
+	 then USE_KMAIL_FOLDER_NAMES=YES
+	      RECURSIVE=YES
+	 else echo "$0: illegal option -- $opt$OPTARG"
+	      exit 1
+	 fi
+	 ;;
+      c) if [ "$OPTARG" = ourier ]
+         then USE_COURIER_FOLDER_NAMES=YES
+	      RECURSIVE=YES
+	 else echo "$0: illegal option -- $opt$OPTARG"
+	      exit 1
+	 fi
+	 ;;
+      r) MARK_AS_READ=YES;;
+      R) RECURSIVE=YES;;
+      q) VERBOSE=NO;;
+      U) DIFF_U_OPT=;;
+      v) echo "$CMD: 1.8 of 2004/06/16"; exit 0;;
+      h) usage | more; exit 0;;
+      H) usage; exit 0;;
+      *) exit 1;;
+  esac
+done
+
+shift `expr $OPTIND - 1`
+OLD=`echo $1 | $SED -e's|/*$||'`
+NEW=`echo $2 | $SED -e's|/*$||'`
+if   [ $# -eq 2 ] ; then NEW_FOLDER=
+elif [ $# -eq 3 ] ; then NEW_FOLDER=`echo $3 | $SED -e's|/*$||'`/
+else error "missing old and new directory, or to many arguments"
+fi
+
+# check old and new arguments
+[ -d $OLD ] || error "no such old directory $OLD";
+[ -f $NEW ] && error "new directory $NEW is a file";
+
+# procmail can not deal with relative paths, therfore add the absolute path
+expr "$NEW" : "/" > /dev/null || NEW=`pwd`/$NEW
+if [ -d $NEW ]
+then
+  [ $FORCE_OVERWRITE = NO ] && error "directory $NEW already exists"
+else
+  create_dir $NEW
+fi
+
+# check that temporary files may be created
+touch $PROCMAIL_RC || error "can not create $PROCMAIL_RC"
+
+###############################################################################
+# do the job
+###############################################################################
+
+if [ $RECURSIVE = YES ]
+then
+    find $OLD/ -type d -print |
+    while read dir
+    do
+      process_dir "$dir"
+    done
+else
+    process_dir $OLD
+fi
+
+###############################################################################
+#                           T h e   e n d
+###############################################################################
+
+# Log: mh2maildir,v $
+# Revision 1.17  2005/04/08 21:00:32  vollmer
+# Fixed:
+# My old mh directory: ~/Mail, was a symlink to my real mail directory.
+# 'find' was failing because it was just enumerating the symlink and not
+# the directories below.
+# Thanks to Mark Histed <histed-at-mit.edu>
+#
+# Revision 1.16  2004/07/23 21:36:55  vollmer
+# - Can handle blanks in directoy names
+#   Added option "-b char"
+#   Thanks to "Vincent Untz" <vincent-at-vuntz.net> reporting that bug.
+#
+# Revision 1.15  2004/07/16 07:19:29  vollmer
+# - Again a fix with sed's extended reg. expr.
+#   Thanks to  "T.Yoshida" <deuce-at-metal.or.jp>
+# - Ignore the first line "From MAILER-DAEMON" when computing diff's.
+# - Use extended reg.expr in SED
+#
+# Revision 1.14  2004/06/16 07:19:46  vollmer
+# - Fixed error in handling the removal of dots in MH directory names.
+#   Thanks to David Carrel <carrel-at-SailPix.com> who gave me the bug fix.
+#
+# Revision 1.13  2004/03/09 08:09:33  vollmer
+# - Thanks to Bjoern Michaelsen <bmichaelsen-at-gmx.de>:
+#   Added -D option and the vimdiff/gvimdiff code.
+#
+# Revision 1.11  2003/06/11 12:23:13  vollmer
+# - Thanks to Chris Horn <chorn-at-alumni.brown.edu> telling me about problems
+#   with a dot in an MH folder name.
+#   Added $DOT_REPLACEMENT (-d)
+#
+# Revision 1.10  2003/01/12 20:21:43  vollmer
+# - Thanks to Matthias Hessler <mail-at-mhessler.de> for sending me some
+#   improvements handling differences.
+# - "new" may be a relative path now (before procmail complained)
+#
+# Revision 1.9  2003/01/10 16:25:44  vollmer
+# typoo's
+#
+# Revision 1.8  2003/01/10 16:20:24  vollmer
+# -R is now set implicitly by -kmail / -courier
+#
+# Revision 1.7  2003/01/10 16:15:34  vollmer
+# Thanks to: Marco Molteni <molter-at-tin.it>
+#   added -A and -U options
+#   better support for FreeBSD's sh, echo, diff and sed programs
+#
+# Revision 1.6  2003/01/10 08:14:39  vollmer
+# added -courier (thanks to "Bruce C. Dillahunty" <bdillahu-at-peachbush.com>)
+#
+# Revision 1.5  2003/01/10 08:08:32  vollmer
+# "Bruce C. Dillahunty" <bdillahu-at-peachbush.com> told me that "Content-Length"
+# is sometimes written as "Content-length",  fix that.
+#
+# Revision 1.4  2002/11/18 08:45:33  vollmer
+# - Added option -a
+# - Removed check for already existing directories (except for
+#   NEW)
+# - Ignore diff's in "Content-Length:" lines
+#
+# Revision 1.3  2002/11/14 18:15:07  vollmer
+# Removed debugging code, which survived
+# create_dir: Added relaxed test
+# Thanks to: Chris Wesseling <chris-at-araneum.nl>
+#
+# Revision 1.1 2002/11/05 14:53:41 vollmer
+# Initial revision

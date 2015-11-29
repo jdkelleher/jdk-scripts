@@ -1,0 +1,35 @@
+#!/bin/csh -f
+foreach i ( $* )
+    if ( ! -f $i ) then
+	echo can't find, skipping $i
+	continue;
+    endif
+    mv $i $i.old
+    if ( -f $i ) then
+	echo can't backup, skipping $i
+	continue;
+    endif
+    indent -npro -bap -bad -ci4 -cli1 -d0 -di2 -eei -nfc1 -i4 \
+	-l70 -lp -sc -st < $i.old \
+    | sed \
+#	-e '/^[ 	]*}/s/}/    &/' \
+#	-e 's/(\([^) 	]\)/( \1/g'   	\
+#	-e 's/(\([^) 	]\)/( \1/g'   	\
+#	-e 's/\([^( 	]\))/\1 )/g'	\
+#	-e 's/\([^( 	]\))/\1 )/g'	\
+	-e 's/( char )/(char)/g'	\
+	-e 's/( double )/(double)/g'	\
+	-e 's/( float )/(float)/g'	\
+	-e 's/( int )/(int)/g'	\
+	-e 's/( long )/(long)/g'	\
+	-e 's/( short )/(short)/g'	\
+	-e 's/( ulong )/(ulong)/g'	\
+	-e 's/( ushort )/(ushort)/g'	\
+	-e 's/( unsigned )/(unsigned)/g'	\
+	-e 's/( void )/(void)/g'	\
+#	-e 's/( \([a-z][a-z0-9_]*\) \* )/(\1 *)/g'	\
+	-e 's/( struct \([a-z][a-z0-9_]*\) )/(struct \1 )/g'	\
+	-e 's/( struct \([a-z][a-z0-9_]*\) \* )/(struct \1 *)/g'	\
+    | unexpand -a \
+    > $i 
+end

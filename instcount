@@ -1,0 +1,11 @@
+#!/usr/bin/perl
+
+while ( <> ) {
+    chomp;
+    $instance{$_}++;
+}
+
+foreach $inst ( keys %instance ) {
+    # print $inst, "\t", $instance{$inst}, "\n";
+    print $instance{$inst}, "\t", $inst, "\n";
+}

@@ -1,0 +1,327 @@
+#!/usr/local/bin/perl
+#
+# $Header: /usa/doke/bin/RCS/mail2page,v 1.3 2003/03/13 01:46:08 doke Exp $
+#
+
+# based very heavily on 
+# mail2page.pl by Jason Kelleher
+
+
+
+$destinations{ "kelleher" }{ short_email } = [ "3025883343\@vtext.com" ];
+#$destinations{ "kelleher" }{ short_email } = [ "jason.kelleher\@skytel.com" ];
+#$destinations{ "doke" }{ email } = [ "doke\@imcingular.com" ];
+#$destinations{ "doke" }{ short_email } = [ "3023630868\@messaging.nextel.com" ];
+#$destinations{ "doke" }{ att_web } = [ "3024386711" ];
+#$destinations{ "doke" }{ metrocall_web } = [ "3025943510" ];
+
+
+
+
+
+$verbose = 0;
+$testing = 0;
+
+$MAX_MESSAGE = 500;   # crude upper limit, adjusted below for specific methods
+
+
+$dupdbfile = "$ENV{HOME}/logs/mail2page_dupdb";
+#$dupdbfile = "$ENV{HOME}/logs/mail2page_dupdb";
+$retain_time = 86400;  # seconds, expiration on duplicates
+
+
+#####################################
+
+
+#use FileHandle;
+#use IPC::Open3;
+#use Getopt::Std;
+
+$ENV{PATH} = '/bin:/usr/ucb';
+
+# People who mail me non-critical stuff in the early morning, 
+# waking me up.  I still want the notice, just not at 7am.  
+# Delay it til a reasonable hour.
+#$delay_paging = 0;
+#$opt_a = 0;
+
+#getopts( 'a:' );
+#if ( $opt_a ) { 
+#    $delay_paging = 1;
+#    #$delay_time = sprintf "%04d", $opt_a;
+#    }
+
+
+$victem = shift;
+if ( ! $victem || ! defined( $destinations{ $victem } ) ) { 
+    die "need to specify victem\n";
+    }
+$verbose && print "victem = $victem\n";
+
+
+
+
+
+# Deal w/ the headers.
+#
+
+$from = '@';
+$subject = '.';
+$date = scalar( localtime );
+
+#
+# Handle headers according to RFC #822
+#
+local($line) = '';
+while (<>) {
+    #print "looking for from and subject: $_";
+    chomp;
+    if ( /^$/ ) { # End of headers, start processing
+	last;
+	}
+    elsif ( /^\S/ ) {	# Start of new header, do previous one
+	$from = substr($line, 5) if $line =~ /^From:/;
+	$subject = substr($line, 8) if $line =~ /^Subject:/;
+	$date = substr($line, 5) if $line =~ /^Date:/;
+	$messageid = substr($line, 11) if $line =~ /^Message-ID:/;
+	$line = $_;
+	} 
+    else {  # starts with space, continuation line, append 
+	$line .= $_;
+	}
+    }
+
+
+
+
+#
+# Deal w/ the body.
+#
+
+$body = '';
+while (<>) {
+    # Disgard blank lines and quoted text.
+    next if ( m/^\s*$|^\s*>/ );
+    # Discard content type lines
+    next if ( m/^This is a MIME message. If you are reading this text/ );
+    next if ( m/^consider changing to a mail reader or gateway/ );
+    next if ( m/^properly handle MIME multipart messages/ );
+    next if ( m/^This message is in MIME format. Since your mail reader/ );
+    next if ( m/^this format, some or all of this message may not be legible/ );
+    next if ( m/^This is a multi-part message in MIME format/ );
+    next if ( m/^--*=_NextPart_/ );
+    next if ( m/^--=_[\d\w\.]*$/ );
+    next if ( m/^--MIMEStream=/ );
+    next if ( m/^Content-Type:/ );
+    next if ( m/^Content-Disposition:/ );
+    next if ( m/^Content-Transfer-Encoding:/ );
+    next if ( m/^[\011]charset="iso-8859-1"/ );
+    next if ( m/^------_=_NextPart_/ );
+    next if ( m/^M\S{63}$>/ );   # Discard uu encoded lines
+    $body .= ' ' . &strip_string( $_ ) . "\n";
+    if ( length ($body) > 4096 ) {
+	# We have enough, forget the rest.
+	last;
+    }
+}
+
+
+if ( &detect_duplicates( $from, $subject, $body ) ) { 
+    $verbose && print STDERR "duplicate message\n";
+    $testing || exit 0;
+    }
+
+$exitcode = 0;
+
+
+
+########################################3
+#
+# pagers we mail to that can take a lot of text, ie blackberry/rim 
+#
+
+
+if ( defined( $destinations{ $victem }{ email } ) ) { 
+    foreach $to ( @{$destinations{ $victem }{ email }} ) { 
+	$cmd = "/usr/lib/sendmail $to";
+	$verbose && print "cmd = $cmd\n";
+	if ( open( pH, "|$cmd" ) ) { 
+	    print pH "From: $from\n";
+	    print pH "To: $to\n";
+	    print pH "Subject: $subject\n";
+	    print pH "Date: $date\n";
+	    print pH "\n";
+	    print pH "$body\n";
+	    close pH;
+	    $exitcode |= $? >> 8;
+	    }
+	}
+    }
+
+
+
+
+
+
+###########################
+# 
+# stuff for more restricted pagers that still use email
+# 
+
+if ( $from ) {
+    $from = &strip_string( $from );
+    $from =~ s/.*<(.*)>.*/$1/;		# lose all but the route-addr
+    #$from =~ s/\@.*//;			# lose the host part
+    #$from =~ s/\%.*//;			# lose the indirect host part
+    #$from =~ s/.*!([^!]+)$/$1/;		# lose the uucp host part
+    #$from = substr( $from, 0, 8 );	# truncate to 8 characters
+    }
+
+if ( $subject ) {
+    $subject = &strip_string( $subject );
+    $subject =~ s/^(Re|Fw|Fwd|Pager):\s*//i;	# trim subject 
+    }
+
+if ( $body ) {
+    $body =~ s/\s+/ /g;
+    # trim to reasonable length.
+    $body = substr( $body, 1, $MAX_MESSAGE );	
+    }
+
+
+
+if ( defined( $destinations{ $victem }{ short_email } ) ) { 
+    foreach $to ( @{$destinations{ $victem }{ short_email }} ) { 
+	$cmd = "/usr/lib/sendmail $to";
+	$verbose && print "cmd = $cmd\n";
+	if ( open( pH, "|$cmd" ) ) { 
+	    print pH "From: $from\n";
+	    print pH "To: $to\n";
+	    print pH "Subject: $subject\n";
+	    print pH "Date: $date\n";
+	    print pH "\n";
+	    print pH "$body\n";
+	    close pH;
+	    $exitcode |= $? >> 8;
+	    }
+	}
+    }
+
+
+
+
+
+###########################
+# 
+# stuff for more restricted pagers use http to multiple fields
+# 
+
+# http escape stuff so it can't mess up the command line
+$from =~ s/[\W]/sprintf "%%%02x", ord( $& )/ge;
+$subject =~ s/[\W]/sprintf "%%%02x", ord( $& )/ge;
+$body =~ s/[\W]/sprintf "%%%02x", ord( $& )/ge;
+
+
+
+if ( defined( $destinations{ $victem }{ att_web } ) ) { 
+    foreach $phone ( @{$destinations{ $victem }{ att_web }} ) { 
+	$cmd = "/usa/doke/bin/page_via_att_web $phone '$from' '$subject' '$body'";
+	$verbose && print "\$cmd = $cmd\n";
+	$rc = system( $cmd );
+	$exitcode |= $rc >> 8;
+	}
+    }
+
+
+
+
+
+
+###########################
+# 
+# stuff for even more restrictive pagers that just take a single string
+# ie metrocall alpha pager
+# 
+
+
+## assemble, strip, trim to fit; in that order to maximize usefull payload
+$message = '';
+$message .= "F:$from " if $from; 
+$message .= "S:$subject " if $subject; 
+$message .= "B:$body" if $body; 
+$message = substr( $message, 0, $MAX_MESSAGE - 1 );
+
+
+if ( defined( $destinations{ $victem }{ metrocall_web } ) ) { 
+    foreach $pin ( @{$destinations{ $victem }{ metrocall_web }} ) { 
+	$cmd = "/usa/doke/bin/page_via_metrocall_web $pin '$message'";
+	$verbose && print "\$cmd = $cmd\n";
+	$rc = system( $cmd );
+	$exitcode |= $rc >> 8;
+	}
+    }
+
+
+exit $exitcode;
+
+
+
+
+
+##########################
+
+sub strip_string {
+    local($s) = @_;
+    local(@chars);
+
+    @chars = unpack("C*", $s);	# remove high-bit
+    for (@chars) { $_ &= 127; }
+    $s = pack("C*", @chars);
+
+    $s =~ tr/\000-\037\177//d;	# delete unprintables
+
+    $s =~ s/ +$//;		# remove spaces from the end
+    $s =~ s/^ +//;		# remove spaces from the front
+    $s =~ s/\s+/ /g;		# change groups of white space into ' '
+    
+    return $s;
+    }
+
+
+
+
+# return 0 if ok, 1 if duplicate
+sub detect_duplicates { 
+    my( $from, $subject, $message ) = @_;
+
+    $key = "$from#$subject#$message";
+    $key = substr( $key, 0, 255 );
+
+    # gdbm uses an internal non-blocking lock
+    # if ( ! tie( %dupdb, 'GDBM_File', $dupdbfile, &GDBM_WRCREAT, 0600 ) ) 
+    # if ( ! tie( %dupdb, 'ODBM_File', $dupdbfile, O_RDWR|O_CREAT, 0600 ) ) 
+    if ( ! dbmopen( %dupdb, $dupdbfile, 0600 ) ) 
+	{
+	# if we can't get the lock, then don't worry about it
+	warn "can't tie database: $!\n";
+	return 0;
+	}
+
+    $rc = 1 if ( $dupdb{$key} );
+
+    $now = time;
+    $dupdb{$key} = $now;
+
+    foreach $k ( keys %dupdb ) {
+	if ( $now - $dupdb{$k} > $retain_time ) {
+	    delete $dupdb{$k};
+	    }
+	}
+
+    #untie %dupdb;
+    dbmclose %dupdb;
+
+    return $rc;
+    }
+
+    
