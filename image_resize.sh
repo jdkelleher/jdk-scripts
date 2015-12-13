@@ -4,9 +4,6 @@ usage() {
 	printf "%s <x%%> file1 [file2 ...]\n" `basename $0`
 }
 
-GEO=$1
-shift
-
 #case $GEO in
 #	25|45|75)
 #	shift
@@ -17,10 +14,13 @@ shift
 #	;;
 #esac
 
-if [ $# -lt 1 ]; then
+if [ $# -lt 2 ]; then
 	usage
 	exit 1
 fi
+
+GEO=$1
+shift
 
 
 for FILE in "$@" ; do
