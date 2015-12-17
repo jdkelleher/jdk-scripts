@@ -2,12 +2,20 @@
 
 # Create and manage rsync snapshots of a set of directory trees.
 
+#
 # This scripts is based on the work of Mike Rubel, Andrew J. Nelson, and rabraham.
 #
 # It was created to backup a Synology DS415+ because the tools packaged by Synology are broken
 # (links are silently ignored) and I wanted something that would work with the versions of shell and
 # rsync which comes pre-installed by Synology.  I tried to keep it a general solution that could be
 # used on other platforms.
+#
+
+#
+# Examlpe of rsync_snapshot.sh to a rolling set of 7 snapshots.  This could be run daily via cron
+# for a full week of backups
+#
+# rsync_snapshot.sh  -v -i 7 /volume1/scripts /volume2/home /volume3/media /volumeUSB1/usbshare1-2/backup/nas
 #
 
 
@@ -19,9 +27,12 @@
 
 # To Do List
 #
+# implement logging; this should include log rotation
 # rsync dry-run prior to rotating snapshots
 # clean up snapshots greater then $SNAP_COUNT
 # fix dry-run/verbose/quiet behavior
+# add exclude functionality
+# strip any trailing / off of SRC...?
 #
 
 
@@ -60,7 +71,7 @@ while getopts "hqvnl:i:" opt; do
 			;;
 		v )
 			VERBOSE=1
-			#RSYNC_OPTIONS="$RSYNC_OPTIONS --verbose"
+			RSYNC_OPTIONS="$RSYNC_OPTIONS --verbose"
 			;;
 		n )
 			DRY_RUN=1
@@ -157,7 +168,7 @@ done
 
 # Create DEST_DIR as final step in rotation
 MKDIR_CMD="mkdir -p ${DEST_DIR}.0"
-if [ $DRY_RUN -eq 1 -o ] ; then
+if [ $DRY_RUN -eq 1 ] ; then
 	echo $MKDIR_CMD
 else
 	[ $VERBOSE -eq 1 ] && echo $MKDIR_CMD
