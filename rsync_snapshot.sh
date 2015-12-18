@@ -107,7 +107,10 @@ while [ $# -gt 1 ] ; do
 	SRC_LIST="$SRC_LIST $1"
 	shift
 done
+
+# Last arg is <dest> ; should put some checks here
 DEST_DIR=$1
+[ $DEST_DIR= == "/" ] && exit 1	# clean this up later
 shift
 
 # Make sure -i was supplied a number
@@ -123,6 +126,9 @@ fi
 # Rotate snapshots. Need to add logic to remove snapshots greater than $SNAP_COUNT
 i=`expr $SNAP_COUNT - 1`
 j=`expr $SNAP_COUNT - 2`
+
+# Remove link to most recent snapshot while in progress
+rm ${DEST_DIR}
 
 # Remove oldest snapshot as first step in rotation
 [ $VERBOSE -eq 1 ] && echo "${i}, ${j}"
@@ -197,6 +203,10 @@ else
 	EXIT_STATUS=$?
 fi
 
+# Link to latest snapshot for ease of use
+if [ $EXIT_STATUS -eq 0 ] ; then
+	ln -s ${DEST_DIR}.0 ${DEST_DIR}
+fi
 
 
 exit $EXIT_STATUS
