@@ -110,7 +110,7 @@ done
 
 # Last arg is <dest> ; should put some checks here
 DEST_DIR=$1
-[ $DEST_DIR= == "/" ] && exit 1	# clean this up later
+[ $DEST_DIR = "/" ] && exit 1	# clean this up later
 shift
 
 # Make sure -i was supplied a number
@@ -126,14 +126,22 @@ fi
 # Rotate snapshots. Need to add logic to remove snapshots greater than $SNAP_COUNT
 i=`expr $SNAP_COUNT - 1`
 j=`expr $SNAP_COUNT - 2`
+PAD_i=`printf "%02d" $i`
+PAD_j=`printf "%02d" $j`
 
 # Remove link to most recent snapshot while in progress
-rm ${DEST_DIR}
+RM_CMD="rm ${DEST_DIR}"
+if [ $DRY_RUN -eq 1 ] ; then
+	echo $RM_CMD
+else
+	[ $VERBOSE -eq 1 ] && echo $RM_CMD
+	eval $RM_CMD
+fi
 
 # Remove oldest snapshot as first step in rotation
-[ $VERBOSE -eq 1 ] && echo "${i}, ${j}"
-if [ -d ${DEST_DIR}.$i ] ; then
-	RM_CMD="rm -rf ${DEST_DIR}.$i"
+#[ $VERBOSE -eq 1 ] && echo "${i}, ${j}"
+if [ -d ${DEST_DIR}.${PAD_i} ] ; then
+	RM_CMD="rm -rf ${DEST_DIR}.${PAD_i}"
 	if [ $DRY_RUN -eq 1 ] ; then
 		echo $RM_CMD
 	else
@@ -145,10 +153,10 @@ fi
 
 while [ $i -gt 0 ] ; do
 
-	[ $VERBOSE -eq 1 ] && echo "${i}, ${j}"
+	#[ $VERBOSE -eq 1 ] && echo "${i}, ${j}"
 
-	if [ -d ${DEST_DIR}.$j ] ; then
-		MV_CMD="mv ${DEST_DIR}.$j ${DEST_DIR}.$i"
+	if [ -d ${DEST_DIR}.${PAD_j} ] ; then
+		MV_CMD="mv ${DEST_DIR}.${PAD_j} ${DEST_DIR}.${PAD_i}"
 		if [ $DRY_RUN -eq 1 ] ; then
 			echo $MV_CMD
 		else
@@ -156,7 +164,7 @@ while [ $i -gt 0 ] ; do
 			eval $MV_CMD
 		fi
 	else
-		MKDIR_CMD="mkdir ${DEST_DIR}.$i"
+		MKDIR_CMD="mkdir ${DEST_DIR}.${PAD_i}"
 		if [ $DRY_RUN -eq 1 ] ; then
 			echo $MKDIR_CMD
 		else
@@ -167,13 +175,15 @@ while [ $i -gt 0 ] ; do
 
 	i=$j
 	j=`expr $j - 1`
+	PAD_i=`printf "%02d" $i`
+	PAD_j=`printf "%02d" $j`
 
 done
 
-[ $VERBOSE -eq 1 ] && echo "${i}, ${j}"
+#[ $VERBOSE -eq 1 ] && echo "${i}, ${j}"
 
 # Create DEST_DIR as final step in rotation
-MKDIR_CMD="mkdir -p ${DEST_DIR}.0"
+MKDIR_CMD="mkdir -p ${DEST_DIR}.00"
 if [ $DRY_RUN -eq 1 ] ; then
 	echo $MKDIR_CMD
 else
@@ -189,9 +199,9 @@ RSYNC_COMMAND=" \
 		--archive \
 		--delete \
 		--human-readable \
-		--link-dest=${DEST_DIR}.1 \
+		--link-dest=${DEST_DIR}.01 \
 		$SRC_LIST \
-		${DEST_DIR}.0 \
+		${DEST_DIR}.00 \
 	"
 
 # Execute rsync
@@ -205,7 +215,13 @@ fi
 
 # Link to latest snapshot for ease of use
 if [ $EXIT_STATUS -eq 0 ] ; then
-	ln -s ${DEST_DIR}.0 ${DEST_DIR}
+	LN_CMD="ln -s ${DEST_DIR}.00 ${DEST_DIR}"
+	if [ $DRY_RUN -eq 1 ] ; then
+		echo $LN_CMD
+	else
+		[ $VERBOSE -eq 1 ] && echo $LN_CMD
+		eval $LN_CMD
+	fi
 fi
 
 
