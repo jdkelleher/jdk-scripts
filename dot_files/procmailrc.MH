@@ -1,0 +1,281 @@
+# procmail rc file
+
+# remember grep lines are ANDed together
+# \t notation does not work in patterns, use a real tab
+
+#  Recipes
+#     A line starting with ':' marks the beginning  of  a  recipe.
+#     It has the following format:
+#
+#          :0 [flags] [ : [locallockfile] ]
+#          <zero or more conditions (one per line)>
+#          <exactly one action line>
+#
+#     Conditions start with a leading `*', everything  after  that
+#     character  is  passed  on  to  the internal egrep literally,
+#     except for leading and trailing whitespace.   These  regular
+#     expressions are completely compatible to the normal egrep(1)
+#     extended regular expressions.   See  also  Extended  regular
+#     expressions.
+#
+#     Conditions are anded; if there are no conditions the  result
+#     will be true be default.
+#
+#     Flags can be any of the following:
+#
+#     H    Egrep the header (default).
+#
+#     B    Egrep the body.
+#
+#     D    Tell the internal egrep to  distinguish  between  upper
+#          and  lower  case  (contrary  to the default which is to
+#          ignore case).
+#
+#     A    This recipe will depend on the  last  preceding  recipe
+#          (on the current block-nesting level) without the `A' or
+#          `a' flag.  This allows you to chain actions that depend
+#          on a common condition.
+#
+#     a    Has the same meaning as the `A' flag, but  will  depend
+#          on the successful completion of the immediately preced-
+#          ing recipe as well.
+#
+#     E    This recipe only executes if the immediately  preceding
+#          recipe was not executed.  Execution of this recipe also
+#          disables any immediately following recipes with the 'E'
+#          flag.  This allows you to specify `else if' actions.
+#
+#     e    This recipe only executes if the immediately  preceding
+#          recipe  failed.   This  allows  you  to specify `error'
+#          actions.
+#
+#     h    Feed the header to the pipe (default).
+#
+#     b    Feed the body to the pipe (default).
+#
+#     f    Consider the pipe as a filter.
+#
+#     c    Generate a carbon copy of this mail.  This  only  makes
+#          sense  on  delivering recipes.  The only non-delivering
+#          recipe this flag has an  effect  on  is  on  a  nesting
+#          block,  in  order  to  generate a carbon copy this will
+#          clone the running procmail process (lockfiles will  not
+#          be  inherited), whereas the clone will proceed as usual
+#          and the parent will jump across the block.
+#
+#     w    Wait for the filter or program to finish and check  its
+#          exitcode  (normally  ignored);  if the filter is unsuc-
+#          cessful, then the text will not have been filtered.
+#
+#     W    Has the same meaning as the `w' flag, but will suppress
+#          any `Program failure' message.
+#
+#     i    Ignore any write errors on this  recipe  (i.e.  usually
+#          due to an early closed pipe).
+#
+#     r    Raw mode, do not try to ensure the mail  ends  with  an
+#          empty line, write it out as is.
+#
+#     There are some special conditions you can use that  are  not
+#     straight regular expressions.  To select them, the condition
+#     must start with:
+#
+#     !    Invert the condition.
+#
+#     $    Evaluate the remainder according to sh(1)  substitution
+#          rules  inside  double  quotes, skip leading whitespace,
+#          then reparse it.
+#
+#     ?    Use the exitcode of the specified program.
+#
+#     <    Check if the total length of the mail is  shorter  than
+#          the specified (in decimal) number of bytes.
+#
+#     >    Analogous to '<'.
+#
+#     variablename ??
+#          Match the remainder against the value of this  environ-
+#          ment variable (this cannot be a pseudo variable).  Spe-
+#          cial cases are `B', `H', `HB' and  `BH',  which  merely
+#          override  the  default  header/body search area defined
+#          for this recipe.
+#
+#     \    To quote any of the above at the start of the line.
+
+
+LOGFILE=$HOME/.procmail.log
+LOGABSTRACT=yes
+VERBOSE=no
+
+PATH=$HOME/bin:$HOME/bin/:/usr/local/bin:/usr/ucb:/usr/bin
+SENDMAIL=/usr/sbin/sendmail
+
+MAILDIR=$HOME/Mail      # You'd better make sure it exists
+
+DEFAULT=/var/mail/$LOGNAME
+#LOCKFILE=/var/mail/${LOGNAME}.procmail.lock
+
+
+
+##
+## Filter out duplicate email messages (Exchange SUCKS!!!!).
+## (Keep this above paging/archiving recipes.)
+#
+:0 Wh : ${HOME}/.msgid.cache.lock
+| formail -D 2048 ${HOME}/.msgid.cache
+
+
+
+##
+## Send everything thru spamassassin
+#
+#:0fw : ${HOME}/.spamassassin.lock
+#* < 256000
+#| /usr/bin/spamassassin 
+
+
+
+##
+## Feed selected emails to pager.
+#
+:0 H
+* ^Subject:[    ]+Pager:
+{
+    :0 c
+    | mail2page kelleher
+ 
+    :0 :
+    $DEFAULT
+}
+
+:0 H
+* ^To:.*kelleher[=-]pager
+{
+    :0 c
+    | mail2page kelleher
+ 
+    :0 :
+    $DEFAULT
+}
+
+:0 Hc
+* ^From:.*(doke|tommy@roadtrip.net|tommy@slackers.net)
+| mail2page kelleher
+
+#:0 H
+#* ^From:.*doke
+#{
+#    :0 c
+#    | mail2page kelleher
+# 
+#    :0 :
+#    $DEFAULT
+#}
+
+
+
+##
+## Refile Cron messages
+#
+:0 H
+* ^From:.+logcheck
+|/usr/lib/mh/rcvstore +cron/logcheck
+#
+# File any crons not already caught.
+:0 H
+* ^From:.+Cron Daemon
+* ^Subject:[	 ]+Cron
+|/usr/lib/mh/rcvstore +cron/misc
+
+
+
+##
+## File financial emails.
+#
+# File Discover Card information
+:0 H
+* ^From:[	 ]+Discover Card
+|/usr/lib/mh/rcvstore +finance/cc/discovercard
+#
+# File E*TRADE Smart Alerts
+:0 H
+* ^From:[	 ]+SmartAlerts@etrade.com
+|/usr/lib/mh/rcvstore +finance/etrade/alerts
+#
+# File E*TRADE Bank Payment Information
+:0 H
+* ^From:[	 ]+bankinginfo@etradebank.com
+* ^Subject:[	 ]+E.TRADE Bank Payment Information
+|/usr/lib/mh/rcvstore +finance/etrade/bank/payment
+
+
+
+##
+## File anything flagged by Spamassassin.
+#
+:0 H 
+* ^X-Spam-Status: Yes
+|/usr/lib/mh/rcvstore +spam/caught
+
+
+
+##
+## File mailing lists - this needs to happen after spam filtering.
+#
+:0 H
+* ^Delivered-To:[	 ]mailing list refugees@thehutt.org
+|/usr/lib/mh/rcvstore +lists/refugees
+#
+:0 H
+* ^List-Id:[	 ]dnd.grumpydude.com
+|/usr/lib/mh/rcvstore +lists/grumpydude.com/dnd
+#
+:0 H
+* ^List-Id:[	 ]BH4
+|/usr/lib/mh/rcvstore +lists/blue-h4
+#
+:0 H
+* ^(To|Cc|Bcc):[	 ].*blue-h4@UDel.Edu
+|/usr/lib/mh/rcvstore +lists/blue-h4
+#
+:0 H
+* ^X-BeenThere:[	 ]linux@lug.udel.edu
+|/usr/lib/mh/rcvstore +lists/lug
+#
+:0 H
+* ^From:[	 ]robofish@blowfish.com
+|/usr/lib/mh/rcvstore +lists/blowfish
+#
+:0 H
+* ^List-Id:[	 ].debian-qt-kde.lists.debian.org.
+|/usr/lib/mh/rcvstore +lists/debian/qt-kde
+#
+:0 H
+* ^List-Id:[	 ].debian-news.lists.debian.org.
+|/usr/lib/mh/rcvstore +lists/debian/news
+#
+:0 H
+* ^From:[	 ]The Motley Fool
+|/usr/lib/mh/rcvstore +lists/fool
+#
+:0 H
+* ^From:[	 ].*sans.org
+|/usr/lib/mh/rcvstore +lists/sans
+#
+:0 H
+* ^List-Id:[	 ]General Accounting Discussions
+|/usr/lib/mh/rcvstore +lists/gnucash-user
+
+
+
+##
+## Copy non-EECIS mail to my Yahoo account.
+#
+#:0 Hc
+#* !^To:.+eecis.udel.edu
+#! kelleher944@yahoo.com
+
+
+# Anything that has not been delivered by now will go to $DEFAULT
+
+

@@ -1,0 +1,30 @@
+set nomesg report=2 autoindent tabstop=8
+set autowrite redraw wm=1 ignorecase magic showmatch
+set tw=100
+set background=dark
+syntax on
+" for cut-and-pasteing in
+map ;p :se noai nosm wm=0
+" back to normal
+map ;P :se ai sm wm=1
+map C !}choper
+"map V !Gchoper
+map ;c I/* A */
+map ;v I(void) 
+map ;d ct"ki:r !datekJxJx
+map ;s :w:!ispell -x -t %:vi! %
+map ;i :w:!myindent %:vi! %
+map ;b :w:!mybcpp %:vi! %
+"map \t lbi{\tt ea}
+"map!  
+"map! 	 
+"map  k
+"map  l
+"map!   
+" word completion
+map!  a. hbmmi?\<2h"zdt.@zywmx`mPbea dwbis"zdt.x@z
+map!  a. bdwmm`xnywmx`mPbea dwbis"zdt.x@z
+map!  a. bdwmm`xNywmx`mPbea dwbis"zdt.x@z
+"map! ] ]%r r[r r[r r[r r[r r[r r[%a
+" this flashes the matching [, but has too many obnoxious side effects
+" for normal use

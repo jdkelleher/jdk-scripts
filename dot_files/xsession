@@ -1,0 +1,11 @@
+#!/bin/sh
+
+#echo "$0 || $1 || $2" > $HOME/.Xsession_args
+
+. $HOME/.profile
+
+# xset +dpms
+
+exec /usr/bin/x-session-manager
+
+

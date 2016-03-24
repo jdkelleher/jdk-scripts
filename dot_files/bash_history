@@ -1,0 +1,99 @@
+cd kelleher@clarice:~$ cd 
+kelleher@clarice:~$ cd 
+cd /usr/share/doc/kon
+set -o vi
+echo $SHELL
+set -o vi
+sudo apt-get install pdksh
+sudo vi /etc/passwd
+cd /usr/share/doc/konsole/
+ls -la
+less README.Linux-font 
+ls
+ls- la
+ls -la
+echo $SHEL
+echo $SHELL
+set -o vi
+dpkg --get-selections | grep fint
+dpkg --get-selections | grep font
+sudo apt-get install xfonts-konsole
+sudo dpkg-reconfigure -plow fontconfig
+locate firefox
+dpkg --get-selections | grep moz
+dpkg --get-selections | grep firefox
+sudo apt-get install mozilla-firefox
+sudo apt-get install firefox
+sudo apt-get install firefox firefox-gnome-support latex-xft-fonts xprint
+sudo apt-get install firefox firefox-gnome-support latex-xft-fonts
+sudo apt-get install firefox latex-xft-fonts
+ls -la
+ls -la
+pwd
+sudo apt-get install pdksh
+su
+set -o vi
+su -
+sudo apt-get install pdksh
+ls -la
+sudo vi /etc/passwd
+id
+sudo 
+su
+ls -la
+sudo 
+su -
+ls -la
+df -k
+df -k .
+uname -a
+df -k
+cat /etc/fstab 
+mount /media/cdrom1
+df -k
+ls -la /media/cdrom1/
+cd
+eject cdrom1
+k3b
+sudo apt-get install pdksh gkrelm2
+su -
+df -k
+ls -la
+sudo vi /etc/passwd
+su -
+pwd
+ls -la
+sudo apt-get install pdksh
+su -
+sudo aptitude install ksh
+su -
+su -
+sudo ls
+su -
+cd /vol/temp/complete/
+ls -la
+mplayer UNDERWORLD_AWAKENING-Title1.avi 
+kmplayer UNDERWORLD_AWAKENING-Title1.avi 
+sudo aptitude install chromium-browser chromium-browser-l10n
+sudo su -
+ls -la
+cd /vol/temp
+cd complete/
+ls -al
+sudo aptitude install ktorrent
+sudo aptitude install gmplayer
+cd
+ls -al
+ls -al .kde/
+gparted
+dpkg --get-selections | grep gpart
+gparted-pkexec 
+sudo su -
+gparted-pkexec 
+sudo su -
+glxinfo
+glxinfo | grep -i vendor
+sudo su -
+sudo su -
+sudo su -
+ssh callisto

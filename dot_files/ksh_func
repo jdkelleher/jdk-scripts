@@ -1,0 +1,34 @@
+##
+# lots of functions
+##
+
+# resets the prompt and the title bar if possible
+function _prompt {
+	HOST=`hostname`
+	ESC=`echo "\033"`
+
+	#DIR=`expr "${PWD}" : '.*\/\(.*\)$'`
+	#DIR=`basename ${PWD}`
+	DIR=`pwd | awk 'BEGIN{FS="/"} NF<=4{print $0} NF>4{split($0,a); OFS="/"; print a[NF-2],a[NF-1],a[NF];}'`
+
+
+	# Make the prompt pretty if we're in an xterm, otherwise
+	# keep out the escape characters.
+	case ${TERM} in
+		aterm|xterm*)
+			#PS1=`echo "${USER}@\033[1m${HOST}\033[0m ${DIR} [!] $ "`
+			PS1="${USER}@${ESC}[1m${HOST}${ESC}[0m ${DIR} [!] $ "
+			echo "\033]0;${USER}@${HOST}:${PWD}\007\c"
+			;;
+		*)
+			PS1="${USER}@${HOST} ${DIR} [!] $ "
+			;;
+	esac
+}
+
+# calls cd, then resets the prompt
+function _cd {
+	\cd "$@"
+	_prompt
+}
+

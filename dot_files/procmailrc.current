@@ -1,0 +1,143 @@
+# procmail rc file
+
+# remember grep lines are ANDed together
+# \t notation does not work in patterns, use a real tab
+
+#  Recipes
+#     A line starting with ':' marks the beginning  of  a  recipe.
+#     It has the following format:
+#
+#          :0 [flags] [ : [locallockfile] ]
+#          <zero or more conditions (one per line)>
+#          <exactly one action line>
+#
+#     Conditions start with a leading `*', everything  after  that
+#     character  is  passed  on  to  the internal egrep literally,
+#     except for leading and trailing whitespace.   These  regular
+#     expressions are completely compatible to the normal egrep(1)
+#     extended regular expressions.   See  also  Extended  regular
+#     expressions.
+#
+#     Conditions are anded; if there are no conditions the  result
+#     will be true be default.
+#
+#     Flags can be any of the following:
+#
+#     H    Egrep the header (default).
+#
+#     B    Egrep the body.
+#
+#     D    Tell the internal egrep to  distinguish  between  upper
+#          and  lower  case  (contrary  to the default which is to
+#          ignore case).
+#
+#     A    This recipe will depend on the  last  preceding  recipe
+#          (on the current block-nesting level) without the `A' or
+#          `a' flag.  This allows you to chain actions that depend
+#          on a common condition.
+#
+#     a    Has the same meaning as the `A' flag, but  will  depend
+#          on the successful completion of the immediately preced-
+#          ing recipe as well.
+#
+#     E    This recipe only executes if the immediately  preceding
+#          recipe was not executed.  Execution of this recipe also
+#          disables any immediately following recipes with the 'E'
+#          flag.  This allows you to specify `else if' actions.
+#
+#     e    This recipe only executes if the immediately  preceding
+#          recipe  failed.   This  allows  you  to specify `error'
+#          actions.
+#
+#     h    Feed the header to the pipe (default).
+#
+#     b    Feed the body to the pipe (default).
+#
+#     f    Consider the pipe as a filter.
+#
+#     c    Generate a carbon copy of this mail.  This  only  makes
+#          sense  on  delivering recipes.  The only non-delivering
+#          recipe this flag has an  effect  on  is  on  a  nesting
+#          block,  in  order  to  generate a carbon copy this will
+#          clone the running procmail process (lockfiles will  not
+#          be  inherited), whereas the clone will proceed as usual
+#          and the parent will jump across the block.
+#
+#     w    Wait for the filter or program to finish and check  its
+#          exitcode  (normally  ignored);  if the filter is unsuc-
+#          cessful, then the text will not have been filtered.
+#
+#     W    Has the same meaning as the `w' flag, but will suppress
+#          any `Program failure' message.
+#
+#     i    Ignore any write errors on this  recipe  (i.e.  usually
+#          due to an early closed pipe).
+#
+#     r    Raw mode, do not try to ensure the mail  ends  with  an
+#          empty line, write it out as is.
+#
+#     There are some special conditions you can use that  are  not
+#     straight regular expressions.  To select them, the condition
+#     must start with:
+#
+#     !    Invert the condition.
+#
+#     $    Evaluate the remainder according to sh(1)  substitution
+#          rules  inside  double  quotes, skip leading whitespace,
+#          then reparse it.
+#
+#     ?    Use the exitcode of the specified program.
+#
+#     <    Check if the total length of the mail is  shorter  than
+#          the specified (in decimal) number of bytes.
+#
+#     >    Analogous to '<'.
+#
+#     variablename ??
+#          Match the remainder against the value of this  environ-
+#          ment variable (this cannot be a pseudo variable).  Spe-
+#          cial cases are `B', `H', `HB' and  `BH',  which  merely
+#          override  the  default  header/body search area defined
+#          for this recipe.
+#
+#     \    To quote any of the above at the start of the line.
+
+
+LOGFILE=$HOME/.procmail.log
+LOGABSTRACT=yes
+VERBOSE=no
+
+PATH=$HOME/bin:$HOME/bin/:/usr/local/bin:/usr/ucb:/usr/bin:/bin
+SENDMAIL=/usr/sbin/sendmail
+
+MAILDIR=$HOME/Maildir/      # You'd better make sure it exists
+
+DEFAULT=$HOME/Maildir/
+#LOCKFILE=/var/mail/${LOGNAME}.procmail.lock
+
+MONTH=`/bin/date +%Y-%m`
+BACKUPFOLDER=${MAILDIR}/.gmail-backups.${MONTH}
+DUMMY=`test -d $BACKUPFOLDER || mkdir $BACKUPFOLDER`
+
+##
+## Filter out duplicate email messages (Exchange SUCKS!!!!).
+## (Keep this above paging/archiving recipes.)
+#
+:0 Wh : ${HOME}/.msgid.cache.lock
+| formail -D 2048 ${HOME}/.msgid.cache
+
+
+# Save all mail to/from beth
+:0 Hc
+* (^TObethann|^From:.*bethann|^From:.*3023790867)
+${MAILDIR}/.save.people.crawford_bethann/
+
+
+# file everything in the appropriate gmail-bacups folder
+:0
+${BACKUPFOLDER}/
+
+
+# Anything that has not been delivered by now will go to $DEFAULT
+
+

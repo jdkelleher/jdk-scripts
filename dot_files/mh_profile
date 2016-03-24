@@ -1,0 +1,28 @@
+Alternate-Mailboxes: kelleher
+Draft-Folder: +drafts
+Editor: vi
+Fcc: +inbox
+Folder-Protect: 700
+Msg-Protect: 600
+Path: Mail
+Sequence-Negation: ^
+Signature: Jason D. Kelleher
+ali: -alias .aliases
+anno: -inplace
+bbc: -quiet
+dist: -annotate -inplace
+folder: -recurse
+folders: -recurse
+forw: -annotate -inplace -format
+mhl: -form mhl.format
+mhshow: -type text/plain
+moreproc: less
+msh: -scan
+pick: -sequence select -nopublic -list
+prompter: -prepend -rapid
+repl: -cc all -nocc me -group -annotate -inplace -filter /home/kelleher/Mail/.mhl_reply
+send: -alias .aliases
+showmimeproc: mhshow
+showproc: mhl
+whatnow: -prompt (whatnow)
+whom: -alias .aliases -check

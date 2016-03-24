@@ -1,0 +1,70 @@
+
+# Overide system locale settings
+# Reset locale
+unset LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES 
+unset LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT 
+unset LC_IDENTIFICATION LC_ALL LANG LANGUAGE PAGER
+# set locale default
+LANG=C
+# export locale
+export LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES 
+export LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT 
+export LC_IDENTIFICATION LC_ALL LANG LANGUAGE PAGER
+###
+
+
+#MAILPATH=\
+#/var/mail/ruddy?New mail in inbox.:\
+#$HOME/.mail/incoming/Friends?New mail in friends.:\
+#$HOME/.mail/incoming/Nicole?Yeppi! New mail in Nicole.:\
+#$HOME/.mail/incoming/Vent?Yuck, new mail in Vent
+
+#PRINTER=apple
+
+#NNTPSERVER=news.speakeasy.net
+
+MAILCHECK=60
+
+PS1="${LOGNAME}@`hostname`:${PWD}$ "
+#PS1="[\u@\h \W]\\$ "
+
+PAGER=less
+CDPATH="."
+
+export MAILPATH MAILCHECK PS1 PAGER CDPATH 
+
+# Take care of separate file shell histories.  And be neat
+# about it.
+mkdir -p "${HOME}/.histories"
+HISTFILE="${HOME}/.histories/history.`uname -n`.${LOGNAME}.$$"
+export HISTFILE
+find "${HOME}/.histories" -type f -mtime +14 | xargs rm -f
+
+##
+# source my functions
+##
+. ${HOME}/.ksh_func
+
+#alias vi="vim"
+#alias zipd="sudo /sbin/mount_msdos -o longnames -u 100 -g 1 -m 755 -l /dev/afd0s4 /mnt/zip"
+#alias uzipd="sudo /sbin/umount /mnt/zip"
+
+alias ls='ls --color=auto'
+alias less='less -R'
+
+alias inbox='clear ; folder -pack +inbox ; scan last:25'
+
+alias cd=_cd
+
+# clean up our prompt and possibly title bar
+_prompt
+
+
+stty erase 
+# set vi style command-line editing
+set -o vi
+# set noclobber
+#set -C
+set -m
+set -o bgnice
+
