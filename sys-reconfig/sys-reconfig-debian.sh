@@ -1,5 +1,8 @@
 #!/bin/bash
 #
+
+# Based on script found here - https://wiki.debian.org/HowTo/ChangeHostname#Not-so_intrusive_script
+
 usage() {
 	echo "usage : $0 <new hostname>"
 	exit 1
@@ -25,13 +28,15 @@ do
    [ -f $file ] && sed -i.old -e "s:$old:$new:g" $file
 done
 
-# Set Hostname - should check for systemd
-hostname $new
-hostnamectl set-hostname $new
+# Set Hostname 
+/bin/hostname $new
+[ -e /usr/bin/hostnamectl ] && hostnamectl set-hostname $new
 
-# regenerate ssh config and keys - should verify openssh-server is installed
-rm /etc/ssh/ssh_host_*
-dpkg-reconfigure openssh-server
+# regenerate ssh config and keys
+if [ -f /usr/sbin/sshd ] ; then
+	rm /etc/ssh/ssh_host_*
+	dpkg-reconfigure openssh-server
+fi
 
 
 # Clean Up
