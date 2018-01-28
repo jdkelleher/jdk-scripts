@@ -3,6 +3,10 @@
 
 # Based on script found here - https://wiki.debian.org/HowTo/ChangeHostname#Not-so_intrusive_script
 
+# To Do
+#    - support changes to /etc/network/interfaces
+
+
 usage() {
 	echo "usage : $0 <new hostname>"
 	exit 1
