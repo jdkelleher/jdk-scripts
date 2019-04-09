@@ -1,30 +1,58 @@
-set nomesg report=2 autoindent tabstop=8
+set nomesg report=2
 set autowrite redraw wm=1 ignorecase magic showmatch
-set tw=100
+set tw=700
 set background=dark
 syntax on
+
+" customize indentation
+set autoindent tabstop=8
+
+" get the 2-space YAML as the default when hit carriage return after the colon
+autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
+
+" Make vim indent 2 spaces for ruby and scala files only
+filetype plugin indent on
+set sw=8
+set ts=8
+:autocmd Filetype ruby set softtabstop=2
+:autocmd Filetype ruby set sw=2
+:autocmd Filetype ruby set ts=2
+
+:autocmd Filetype scala set softtabstop=2
+:autocmd Filetype scala set sw=2
+:autocmd Filetype scala set ts=2
+
+
 " for cut-and-pasteing in
 map ;p :se noai nosm wm=0
 " back to normal
 map ;P :se ai sm wm=1
-map C !}choper
-"map V !Gchoper
+
+" useful bits for C
 map ;c I/* A */
 map ;v I(void) 
+
+"run useful tools on the buffer
+map C !}choper
+"map V !Gchoper
 map ;d ct"ki:r !datekJxJx
 map ;s :w:!ispell -x -t %:vi! %
 map ;i :w:!myindent %:vi! %
 map ;b :w:!mybcpp %:vi! %
+
+" word completion
+map!  a. hbmmi?\<2h"zdt.@zywmx`mPbea dwbis"zdt.x@z
+map!  a. bdwmm`xnywmx`mPbea dwbis"zdt.x@z
+map!  a. bdwmm`xNywmx`mPbea dwbis"zdt.x@z
+
+"map! ] ]%r r[r r[r r[r r[r r[r r[%a
+" this flashes the matching [, but has too many obnoxious side effects
+" for normal use
+
+" not sure where I found these bits
 "map \t lbi{\tt ea}
 "map!  
 "map! 	 
 "map  k
 "map  l
 "map!   
-" word completion
-map!  a. hbmmi?\<2h"zdt.@zywmx`mPbea dwbis"zdt.x@z
-map!  a. bdwmm`xnywmx`mPbea dwbis"zdt.x@z
-map!  a. bdwmm`xNywmx`mPbea dwbis"zdt.x@z
-"map! ] ]%r r[r r[r r[r r[r r[r r[%a
-" this flashes the matching [, but has too many obnoxious side effects
-" for normal use
