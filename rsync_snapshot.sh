@@ -215,7 +215,8 @@ fi
 
 # Link to latest snapshot for ease of use
 if [ $EXIT_STATUS -eq 0 ] ; then
-	LN_CMD="ln -s ${DEST_DIR}.00 ${DEST_DIR}"
+	DEST_DIR_BASENAME=`basename ${DEST_DIR}`	# make link relative to prevet issues if mount points change
+	LN_CMD="ln -s ${DEST_DIR_BASENAME}.00 ${DEST_DIR}"
 	if [ $DRY_RUN -eq 1 ] ; then
 		echo $LN_CMD
 	else
