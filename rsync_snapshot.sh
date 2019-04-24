@@ -43,7 +43,7 @@ usage() {
 	echo "\t-q\t\tpass --quiet flag to rsync"
 	echo "\t-v\t\tincrease verbosity and pass --verbose flag to rsync"
 	echo "\t-n\t\tdisplay commands which would be run and pass --dry-run flag to rsync"
-	echo "\t-l logfile\tlog to the specified file"
+	echo "\t-l logfile\tlog to the specified file (not implemented)"
 	echo "\t-i N\t\tkeep N snapshots"
 }
 
@@ -58,6 +58,10 @@ SNAP_COUNT=0
 SRC_LIST=""
 DEST_DIR=""
 EXIT_STATUS=0
+
+# Used to gracefully handle partial transfer due to vanished source files
+RSYNC_IGNOREEXIT=24
+RSYNC_IGNOREOUT='^(file has vanished: |rsync warning: some files vanished before they could be transferred)'
 
 
 while getopts "hqvnl:i:" opt; do
@@ -130,7 +134,7 @@ PAD_i=`printf "%02d" $i`
 PAD_j=`printf "%02d" $j`
 
 # Remove link to most recent snapshot while in progress
-RM_CMD="rm ${DEST_DIR}"
+RM_CMD="rm -f ${DEST_DIR}"
 if [ $DRY_RUN -eq 1 ] ; then
 	echo $RM_CMD
 else
@@ -209,8 +213,14 @@ if [ $DRY_RUN -eq 1 ] ; then
 	echo $RSYNC_COMMAND
 else
 	[ $VERBOSE -eq 1 ] && echo $RSYNC_COMMAND
-	eval $RSYNC_COMMAND
+	# Gracefully handle partial transfer due to vanished source files
+	set -o pipefail
+	eval $RSYNC_COMMAND 2>&1 | (egrep -v "$RSYNC_IGNOREOUT" || true)
 	EXIT_STATUS=$?
+	set +o pipefail
+	if [[ $EXIT_STATUS == $RSYNC_IGNOREEXIT ]]; then
+		EXIT_STATUS=0
+	fi
 fi
 
 # Link to latest snapshot for ease of use
@@ -225,7 +235,7 @@ if [ $EXIT_STATUS -eq 0 ] ; then
 	fi
 fi
 
-
+# Return the rsync exit code
 exit $EXIT_STATUS
 
 
