@@ -2,13 +2,22 @@ set nomesg report=2
 set autowrite redraw wm=1 ignorecase magic showmatch
 set tw=700
 set background=dark
+
+" Make sure syntax is on and let modeline set filetypes
 syntax on
+set modeline
+set modelines=10
+
+" Disable vim automatic visual mode on mouse select
+set mouse-=a
 
 " customize indentation
 set autoindent tabstop=8
 
 " get the 2-space YAML as the default when hit carriage return after the colon
 autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
+" replaced with sls.vim plugin
+autocmd BufNewFile,BufRead *.sls setlocal ft=yaml
 
 " Make vim indent 2 spaces for ruby and scala files only
 filetype plugin indent on
@@ -24,9 +33,12 @@ set ts=8
 
 
 " for cut-and-pasteing in
-map ;p :se noai nosm wm=0
+"map ;p :se noai nosm wm=0
+map ;p :se paste
 " back to normal
-map ;P :se ai sm wm=1
+"map ;P :se ai sm wm=1
+map ;P :se nopaste
+
 
 " useful bits for C
 map ;c I/* A */
