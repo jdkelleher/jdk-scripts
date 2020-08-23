@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# https://gist.github.com/yurrriq/7fc7634dd00494072f45
+
+# curl -s ipv4.icanhazip.com
+# curl -s ipv6.icanhazip.com
+
+# curl -s http://ipv4.ident.me/ | awk '{print $1}'
+# curl -s http://ipv6.ident.me/ | awk '{print $1}'
+
+# https://www.ipify.org/
+# curl -s https://api.ipify.org | awk '{print $1}'
+# curl -s https://api6.ipify.org | awk '{print $1}'
+
+
+wget http://ipecho.net/plain -O - -q
+
+exitCode=$?
+
+echo
+
+exit $exitCode
+
