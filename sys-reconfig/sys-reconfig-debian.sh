@@ -42,6 +42,11 @@ if [ -f /usr/sbin/sshd ] ; then
 	dpkg-reconfigure openssh-server
 fi
 
+# Re-create unique machine id - assuming this is being run after cloning a vm
+rm -f /etc/machine-id /var/lib/dbus/machine-id
+dbus-uuidgen --ensure=/etc/machine-id
+dbus-uuidgen --ensure
+
 
 # Clean Up
 apt-get clean
