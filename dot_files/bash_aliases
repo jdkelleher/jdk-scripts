@@ -1,0 +1,8 @@
+
+# git pull on all subdirectories
+#
+alias git_pull_all='for i in */.git; do ( echo $i; cd $i/..; git pull; ); done'
+
+alias nssh='ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
+alias nscp='scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
+
